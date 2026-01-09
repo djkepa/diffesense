@@ -1,5 +1,5 @@
 {
-  "name": "@diffesense/cli",
+  "name": "diffesense",
   "version": "1.0.0",
   "description": "Framework-agnostic JavaScript/TypeScript change-risk engine for PR reviews",
   "bin": {
