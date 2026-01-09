@@ -1,0 +1,23 @@
+# Source files (only dist/ is published)
+src/
+tests/
+*.test.ts
+
+# Development files
+.git/
+.github/
+.vscode/
+node_modules/
+coverage/
+
+# Config files
+tsconfig.json
+vitest.config.ts
+.gitignore
+
+# Build artifacts
+*.log
+*.tsbuildinfo
+*.tgz
+.DS_Store
+Thumbs.db

@@ -1,0 +1,71 @@
+# DiffeSense GitLab CI Template
+# Analyzes MR changes for risk and posts comment with findings
+#
+# Usage:
+#   1. Copy this file to your repo root as .gitlab-ci-diffesense.yml
+#   2. Include it in your main .gitlab-ci.yml:
+#      include:
+#        - local: '.gitlab-ci-diffesense.yml'
+#   3. That's it! DiffeSense will run on every MR.
+#
+# Configuration:
+#   - Add .diffesense.yml to your repo root for custom settings
+#   - See https://github.com/diffesense/diffesense for docs
+
+diffesense:
+  stage: test
+  image: node:20-alpine
+
+  # Only run on merge requests
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+  variables:
+    GIT_DEPTH: 0 # Full history needed for diff
+
+  before_script:
+    - apk add --no-cache git jq curl
+
+  script:
+    # Run analysis
+    - npx @diffesense/cli@latest -b $CI_MERGE_REQUEST_TARGET_BRANCH_NAME -f json > diffesense-result.json || true
+    - npx @diffesense/cli@latest -b $CI_MERGE_REQUEST_TARGET_BRANCH_NAME -f markdown > diffesense-comment.md || true
+
+    # Extract results
+    - EXIT_CODE=$(cat diffesense-result.json | jq -r '.summary.exitCode // 0')
+    - BLOCKERS=$(cat diffesense-result.json | jq -r '.summary.blockers // 0')
+    - HIGHEST_RISK=$(cat diffesense-result.json | jq -r '.summary.highestRisk // 0')
+
+    # Post comment to MR (requires GITLAB_TOKEN with api scope)
+    - |
+      if [ -n "$GITLAB_TOKEN" ]; then
+        COMMENT_BODY=$(cat diffesense-comment.md | jq -Rs .)
+        curl --silent --request POST \
+          --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+          --header "Content-Type: application/json" \
+          --data "{\"body\": $COMMENT_BODY}" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
+      fi
+
+    # Set exit code
+    - |
+      if [ "$EXIT_CODE" = "1" ]; then
+        echo "DiffeSense found $BLOCKERS blocker(s). Review required."
+        exit 1
+      else
+        echo "DiffeSense: All changes within acceptable risk levels."
+      fi
+
+  artifacts:
+    when: always
+    paths:
+      - diffesense-result.json
+      - diffesense-comment.md
+    expire_in: 30 days
+    reports:
+      # GitLab will display this in the MR widget
+      codequality: diffesense-result.json
+
+  # Allow failure so pipeline doesn't block entirely
+  # Remove this line to make DiffeSense blocking
+  allow_failure: true

@@ -1,0 +1,92 @@
+# DiffeSense GitHub Action
+# Analyzes PR changes for risk and posts comment with findings
+#
+# Usage:
+#   1. Copy this file to your repo: .github/workflows/diffesense.yml
+#   2. That's it! DiffeSense will run on every PR.
+#
+# Configuration:
+#   - Add .diffesense.yml to your repo root for custom settings
+#   - See https://github.com/diffesense/diffesense for docs
+
+name: DiffeSense
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  risk-analysis:
+    name: Change Risk Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history needed for diff
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run DiffeSense
+        id: diffesense
+        run: |
+          # Run analysis and capture output
+          npx @diffesense/cli@latest \
+            -b ${{ github.base_ref }} \
+            -f json \
+            > diffesense-result.json 2>&1 || true
+
+          # Also generate markdown for comment
+          npx @diffesense/cli@latest \
+            -b ${{ github.base_ref }} \
+            -f markdown \
+            > diffesense-comment.md 2>&1 || true
+
+          # Extract exit code from JSON
+          EXIT_CODE=$(cat diffesense-result.json | jq -r '.summary.exitCode // 0')
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          # Extract summary for annotation
+          BLOCKERS=$(cat diffesense-result.json | jq -r '.summary.blockers // 0')
+          HIGHEST_RISK=$(cat diffesense-result.json | jq -r '.summary.highestRisk // 0')
+          echo "blockers=$BLOCKERS" >> $GITHUB_OUTPUT
+          echo "highest_risk=$HIGHEST_RISK" >> $GITHUB_OUTPUT
+
+      - name: Post PR Comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: diffesense
+          path: diffesense-comment.md
+
+      - name: Set Status
+        if: always()
+        run: |
+          EXIT_CODE=${{ steps.diffesense.outputs.exit_code }}
+          BLOCKERS=${{ steps.diffesense.outputs.blockers }}
+
+          if [ "$EXIT_CODE" = "1" ]; then
+            echo "::error::DiffeSense found $BLOCKERS blocker(s). Review required."
+            exit 1
+          else
+            echo "::notice::DiffeSense: All changes within acceptable risk levels."
+          fi
+
+      - name: Upload Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diffesense-results
+          path: |
+            diffesense-result.json
+            diffesense-comment.md
+          retention-days: 30

@@ -1,0 +1,74 @@
+{
+  "name": "@diffesense/cli",
+  "version": "1.0.0",
+  "description": "Framework-agnostic JavaScript/TypeScript change-risk engine for PR reviews",
+  "bin": {
+    "dsense": "dist/cli/dsense.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli/dsense.js",
+    "dsense": "node dist/cli/dsense.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "git",
+    "diff",
+    "risk",
+    "pr",
+    "pull-request",
+    "code-review",
+    "static-analysis",
+    "typescript",
+    "javascript",
+    "react",
+    "vue",
+    "angular",
+    "nodejs",
+    "ci",
+    "cd",
+    "devops",
+    "code-quality"
+  ],
+  "author": {
+    "name": "Branislav Grozdanovic",
+    "email": "contact@diffesense.dev",
+    "url": "https://github.com/djkepa"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/djkepa/diffesense.git"
+  },
+  "homepage": "https://github.com/djkepa/diffesense#readme",
+  "bugs": {
+    "url": "https://github.com/djkepa/diffesense/issues"
+  },
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "commander": "^12.0.0",
+    "js-yaml": "^4.1.0",
+    "minimatch": "^9.0.3",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/minimatch": "^5.1.2",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
