@@ -183,7 +183,7 @@ Future versions will support custom detectors:
 
 ```typescript
 // custom-detector.ts
-import { BaseDetector, Signal } from '@diffesense/cli';
+import { BaseDetector, Signal } from 'diffesense';
 
 export class MyDetector extends BaseDetector {
   detect(): Signal[] {

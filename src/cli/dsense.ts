@@ -552,7 +552,7 @@ jobs:
           cache: 'npm'
 
       - name: Install DiffeSense
-        run: npm install -g @diffesense/cli
+        run: npm install -g diffesense
 
       - name: Run Analysis
         id: diffesense
@@ -649,7 +649,7 @@ jobs:
         with:
           node-version: '18'
 
-      - run: npm install -g @diffesense/cli
+      - run: npm install -g diffesense
 
       - name: Analyze
         run: dsense --base \${{ github.event.pull_request.base.ref }} --format markdown > report.md
@@ -682,7 +682,7 @@ diffesense:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   before_script:
-    - npm install -g @diffesense/cli
+    - npm install -g diffesense
   script:
     - git fetch origin $CI_MERGE_REQUEST_TARGET_BRANCH_NAME 2>/dev/null || true
     - dsense --base $CI_MERGE_REQUEST_TARGET_BRANCH_NAME --format json > report.json || true
@@ -713,7 +713,7 @@ diffesense:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   before_script:
-    - npm install -g @diffesense/cli
+    - npm install -g diffesense
   script:
     - git fetch origin $CI_MERGE_REQUEST_TARGET_BRANCH_NAME 2>/dev/null || true
     - dsense --base $CI_MERGE_REQUEST_TARGET_BRANCH_NAME --format markdown

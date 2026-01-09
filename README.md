@@ -4,9 +4,9 @@
 
 DiffeSense analyzes code changes in your Pull Requests and tells you which files are risky and what to do about them. It's not a linter—it's a risk engine that helps you make better merge decisions.
 
-[![npm version](https://img.shields.io/npm/v/@diffesense/cli.svg)](https://www.npmjs.com/package/@diffesense/cli)
+[![npm version](https://img.shields.io/npm/v/diffesense.svg)](https://www.npmjs.com/package/diffesense)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/node/v/@diffesense/cli.svg)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/node/v/diffesense.svg)](https://nodejs.org)
 
 ---
 
@@ -30,7 +30,7 @@ You're reviewing a PR with 15 changed files. Which ones actually matter? Which o
 
 ```bash
 # Install
-npm install -g @diffesense/cli
+npm install -g diffesense
 
 # Run on your PR
 dsense
@@ -105,13 +105,13 @@ DiffeSense: "Run: npm test -- auth, Review: @security-team"
 
 ```bash
 # Global (recommended)
-npm install -g @diffesense/cli
+npm install -g diffesense
 
 # Project-local
-npm install --save-dev @diffesense/cli
+npm install --save-dev diffesense
 
 # Or use without installing
-npx @diffesense/cli
+npx diffesense
 ```
 
 ---
@@ -194,7 +194,7 @@ jobs:
           fetch-depth: 0
       
       - name: Run DiffeSense
-        run: npx @diffesense/cli --format markdown
+        run: npx diffesense --format markdown
 ```
 
 ### GitLab CI
@@ -208,7 +208,7 @@ dsense ci gitlab > .gitlab-ci-diffesense.yml
 
 ```bash
 # .husky/pre-commit
-npx @diffesense/cli --scope staged --quiet
+npx diffesense --scope staged --quiet
 ```
 
 ---

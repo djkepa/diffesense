@@ -41,13 +41,13 @@ jobs:
         id: diffesense
         run: |
           # Run analysis and capture output
-          npx @diffesense/cli@latest \
+          npx diffesense@latest \
             -b ${{ github.base_ref }} \
             -f json \
             > diffesense-result.json 2>&1 || true
 
           # Also generate markdown for comment
-          npx @diffesense/cli@latest \
+          npx diffesense@latest \
             -b ${{ github.base_ref }} \
             -f markdown \
             > diffesense-comment.md 2>&1 || true

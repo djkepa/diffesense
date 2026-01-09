@@ -142,7 +142,7 @@ DiffeSense is a framework-agnostic JavaScript/TypeScript change-risk engine that
 ## 📦 Installation
 
 ```bash
-npm install -g @diffesense/cli
+npm install -g diffesense
 ```
 
 ## 📖 Documentation
@@ -176,7 +176,7 @@ Thank you for using DiffeSense! If it helps you ship better code, consider givin
 
 ```bash
 # Test npm package
-npm install -g @diffesense/cli
+npm install -g diffesense
 dsense --version
 # Should show: 1.0.0
 
@@ -185,7 +185,7 @@ cd /path/to/some/project
 dsense --commit HEAD
 
 # Uninstall test version
-npm uninstall -g @diffesense/cli
+npm uninstall -g diffesense
 ```
 
 ---
@@ -213,7 +213,7 @@ Instead of "Missing semicolon on line 42", it tells you:
 
 100% free & open-source (MIT)
 
-npm install -g @diffesense/cli
+npm install -g diffesense
 
 https://github.com/djkepa/diffesense
 
@@ -245,7 +245,7 @@ Before releasing, make sure:
 ### Unpublish from npm (within 72 hours)
 
 ```bash
-npm unpublish @diffesense/cli@1.0.0
+npm unpublish diffesense@1.0.0
 ```
 
 ### Delete Git tag

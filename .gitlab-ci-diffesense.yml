@@ -28,8 +28,8 @@ diffesense:
 
   script:
     # Run analysis
-    - npx @diffesense/cli@latest -b $CI_MERGE_REQUEST_TARGET_BRANCH_NAME -f json > diffesense-result.json || true
-    - npx @diffesense/cli@latest -b $CI_MERGE_REQUEST_TARGET_BRANCH_NAME -f markdown > diffesense-comment.md || true
+    - npx diffesense@latest -b $CI_MERGE_REQUEST_TARGET_BRANCH_NAME -f json > diffesense-result.json || true
+    - npx diffesense@latest -b $CI_MERGE_REQUEST_TARGET_BRANCH_NAME -f markdown > diffesense-comment.md || true
 
     # Extract results
     - EXIT_CODE=$(cat diffesense-result.json | jq -r '.summary.exitCode // 0')

@@ -8,10 +8,10 @@ Get started with DiffeSense in 5 minutes.
 
 ```bash
 # Global (recommended)
-npm install -g @diffesense/cli
+npm install -g diffesense
 
 # Or use without installing
-npx @diffesense/cli
+npx diffesense
 ```
 
 ---
@@ -82,7 +82,7 @@ npm install --save-dev husky
 npx husky init
 
 # Add to .husky/pre-commit
-npx @diffesense/cli --scope staged --quiet
+npx diffesense --scope staged --quiet
 ```
 
 ### CI/CD Integration

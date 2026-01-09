@@ -32,13 +32,13 @@ Complete command-line interface documentation for DiffeSense.
 
 ```bash
 # Global installation
-npm install -g @diffesense/cli
+npm install -g diffesense
 
 # Or use with npx (no installation)
-npx @diffesense/cli
+npx diffesense
 
 # Project-local installation
-npm install --save-dev @diffesense/cli
+npm install --save-dev diffesense
 ```
 
 ---
@@ -1035,7 +1035,7 @@ dsense --base ${CHANGE_TARGET} --format console
 
 ```bash
 # .husky/pre-commit
-npx @diffesense/cli --scope staged --quiet
+npx diffesense --scope staged --quiet
 ```
 
 ### Custom Profiles
