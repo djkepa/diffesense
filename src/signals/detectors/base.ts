@@ -140,6 +140,9 @@ export class BaseDetector {
       ...this.detectSideEffects(),
       ...this.detectAsync(),
       ...this.detectSignaturePatterns(),
+      ...this.detectSecurity(),
+      ...this.detectCorrectness(),
+      ...this.detectMaintainability(),
     ];
   }
 
@@ -745,5 +748,683 @@ export class BaseDetector {
     }
 
     return results;
+  }
+
+  /**
+   * SEC-001 to SEC-024: Security signals
+   */
+  protected detectSecurity(): Signal[] {
+    const signals: Signal[] = [];
+    const { lines, content, filePath } = this.ctx;
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineNum = i + 1;
+      if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+      const line = lines[i];
+
+      if (/\beval\s*\(|new\s+Function\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-eval',
+            title: 'Dynamic Code Execution',
+            category: 'side-effect',
+            reason: 'eval/Function() executes arbitrary code - critical security risk',
+            weight: 1.0,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: 'high',
+            tags: ['security', 'eval', 'injection'],
+            evidence: { kind: 'regex', pattern: 'eval|new Function' },
+            actions: [
+              {
+                type: 'review_request',
+                text: 'Security review required - dynamic code execution',
+                reviewers: ['@security-team'],
+              },
+            ],
+          }),
+        );
+      }
+
+      if (/dangerouslySetInnerHTML|innerHTML\s*=|insertAdjacentHTML/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-xss-sink',
+            title: 'XSS Sink',
+            category: 'side-effect',
+            reason: 'HTML injection sink - verify input sanitization',
+            weight: 0.9,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: 'high',
+            tags: ['security', 'xss', 'injection'],
+            evidence: { kind: 'regex', pattern: 'innerHTML|dangerouslySetInnerHTML' },
+            actions: [
+              {
+                type: 'mitigation_steps',
+                text: 'Prevent XSS',
+                steps: [
+                  'Use DOMPurify to sanitize HTML',
+                  'Validate and escape user input',
+                  'Use textContent instead of innerHTML when possible',
+                ],
+              },
+            ],
+          }),
+        );
+      }
+
+      if (/exec\s*\(|execSync\s*\(|spawn\s*\(|spawnSync\s*\(/.test(line)) {
+        const hasUserInput = /\$\{|\+\s*\w+|`.*\$/.test(line);
+        signals.push(
+          this.createSignal({
+            id: 'sec-command-injection',
+            title: hasUserInput ? 'Command Injection Risk' : 'Shell Execution',
+            category: 'side-effect',
+            reason: hasUserInput
+              ? 'Shell command with dynamic input - command injection risk'
+              : 'Shell command execution - verify input validation',
+            weight: hasUserInput ? 1.0 : 0.7,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: hasUserInput ? 'high' : 'medium',
+            tags: ['security', 'command-injection', 'shell'],
+            evidence: { kind: 'regex', pattern: 'exec|spawn' },
+            actions: hasUserInput
+              ? [
+                  {
+                    type: 'review_request',
+                    text: 'Security review - potential command injection',
+                    reviewers: ['@security-team'],
+                  },
+                ]
+              : undefined,
+          }),
+        );
+      }
+
+      if (
+        /(?:api[_-]?key|secret|password|token|auth|credential)\s*[=:]\s*['"][^'"]{8,}['"]/i.test(
+          line,
+        )
+      ) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-hardcoded-secret',
+            title: 'Hardcoded Secret',
+            category: 'side-effect',
+            reason: 'Potential hardcoded secret/credential in code',
+            weight: 0.9,
+            lines: [lineNum],
+            snippet: '*** REDACTED ***',
+            signalClass: 'critical',
+            confidence: 'medium',
+            tags: ['security', 'secrets', 'credentials'],
+            evidence: { kind: 'regex', pattern: 'hardcoded secret pattern' },
+            actions: [
+              {
+                type: 'mitigation_steps',
+                text: 'Remove hardcoded secrets',
+                steps: [
+                  'Use environment variables',
+                  'Use secrets manager (Vault, AWS Secrets, etc.)',
+                  'Add to .gitignore if config file',
+                ],
+              },
+            ],
+          }),
+        );
+      }
+
+      if (
+        /console\.(log|info|debug|warn)\s*\([^)]*(?:password|token|secret|auth|credential)/i.test(
+          line,
+        )
+      ) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-sensitive-log',
+            title: 'Sensitive Data Logging',
+            category: 'side-effect',
+            reason: 'Logging potentially sensitive data',
+            weight: 0.7,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: 'medium',
+            tags: ['security', 'logging', 'pii'],
+            evidence: { kind: 'regex', pattern: 'console.log with sensitive' },
+          }),
+        );
+      }
+
+      if (/createHash\s*\(\s*['"](?:md5|sha1)['"]\)|\.digest\s*\(\s*['"]hex['"]/.test(line)) {
+        if (/md5|sha1/i.test(line)) {
+          signals.push(
+            this.createSignal({
+              id: 'sec-weak-crypto',
+              title: 'Weak Cryptography',
+              category: 'side-effect',
+              reason: 'MD5/SHA1 are weak for security - use SHA256 or bcrypt',
+              weight: 0.6,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'high',
+              tags: ['security', 'crypto', 'weak'],
+              evidence: { kind: 'regex', pattern: 'md5|sha1' },
+            }),
+          );
+        }
+      }
+
+      if (/cors\s*\(\s*\{[^}]*origin\s*:\s*['"]\*['"]|Access-Control-Allow-Origin.*\*/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-cors-wildcard',
+            title: 'CORS Wildcard Origin',
+            category: 'side-effect',
+            reason: 'CORS allows any origin - verify this is intended',
+            weight: 0.6,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['security', 'cors'],
+            evidence: { kind: 'regex', pattern: 'origin: *' },
+          }),
+        );
+      }
+
+      if (/\.(query|execute)\s*\(\s*[`'"].*\$\{|\.(query|execute)\s*\(\s*\w+\s*\+/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-sql-injection',
+            title: 'SQL Injection Risk',
+            category: 'side-effect',
+            reason: 'SQL query with string concatenation - use parameterized queries',
+            weight: 0.9,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: 'high',
+            tags: ['security', 'sql-injection', 'database'],
+            evidence: { kind: 'regex', pattern: 'query with concatenation' },
+            actions: [
+              {
+                type: 'mitigation_steps',
+                text: 'Prevent SQL injection',
+                steps: [
+                  'Use parameterized queries',
+                  'Use prepared statements',
+                  'Use ORM with proper escaping',
+                ],
+              },
+            ],
+          }),
+        );
+      }
+
+      if (/Object\.assign\s*\([^,]+,\s*(?:req\.body|req\.query|JSON\.parse)/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-prototype-pollution',
+            title: 'Prototype Pollution Risk',
+            category: 'side-effect',
+            reason: 'Object.assign with untrusted input - prototype pollution risk',
+            weight: 0.7,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: 'medium',
+            tags: ['security', 'prototype-pollution'],
+            evidence: { kind: 'regex', pattern: 'Object.assign with untrusted' },
+          }),
+        );
+      }
+
+      if (/fetch\s*\(\s*(?:req\.body|req\.query|req\.params)/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'sec-ssrf',
+            title: 'SSRF Risk',
+            category: 'side-effect',
+            reason: 'Fetching URL from user input - SSRF vulnerability',
+            weight: 0.9,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'critical',
+            confidence: 'medium',
+            tags: ['security', 'ssrf', 'network'],
+            evidence: { kind: 'regex', pattern: 'fetch with user input' },
+          }),
+        );
+      }
+
+      if (/JSON\.parse\s*\(\s*(?:req\.body|atob|Buffer\.from)/.test(line)) {
+        const nearbyTry = lines
+          .slice(Math.max(0, i - 5), i)
+          .join('\n')
+          .includes('try');
+        if (!nearbyTry) {
+          signals.push(
+            this.createSignal({
+              id: 'sec-unsafe-deserialize',
+              title: 'Unsafe Deserialization',
+              category: 'side-effect',
+              reason: 'JSON.parse on untrusted input without try/catch',
+              weight: 0.5,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'medium',
+              tags: ['security', 'deserialization'],
+              evidence: { kind: 'regex', pattern: 'JSON.parse untrusted' },
+            }),
+          );
+        }
+      }
+    }
+
+    if (filePath.endsWith('package.json')) {
+      for (let i = 0; i < lines.length; i++) {
+        const lineNum = i + 1;
+        if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+        const line = lines[i];
+
+        if (/postinstall|preinstall|prepare/.test(line)) {
+          signals.push(
+            this.createSignal({
+              id: 'sec-npm-script',
+              title: 'NPM Lifecycle Script',
+              category: 'side-effect',
+              reason: 'NPM lifecycle script changed - verify command is safe',
+              weight: 0.7,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'critical',
+              confidence: 'high',
+              tags: ['security', 'npm', 'supply-chain'],
+              evidence: { kind: 'regex', pattern: 'postinstall|preinstall' },
+            }),
+          );
+        }
+      }
+    }
+
+    return signals;
+  }
+
+  /**
+   * COR-001 to COR-018: Correctness signals
+   */
+  protected detectCorrectness(): Signal[] {
+    const signals: Signal[] = [];
+    const { lines, content } = this.ctx;
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineNum = i + 1;
+      if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+      const line = lines[i];
+
+      if (/^\s*(?:fetch|axios|Promise)\s*\(|^\s*\w+\.\w+Async\s*\(/.test(line)) {
+        const hasAwait = /await\s/.test(line);
+        const hasThen = /\.then\s*\(/.test(lines.slice(i, i + 3).join(''));
+        const hasCatch = /\.catch\s*\(/.test(lines.slice(i, i + 5).join(''));
+        if (!hasAwait && !hasThen) {
+          signals.push(
+            this.createSignal({
+              id: 'cor-unhandled-promise',
+              title: 'Unhandled Promise',
+              category: 'async',
+              reason: 'Promise without await or .then() - result ignored',
+              weight: 0.6,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'medium',
+              tags: ['correctness', 'async', 'promise'],
+              evidence: { kind: 'heuristic', pattern: 'promise without await/then' },
+            }),
+          );
+        }
+      }
+
+      if (/catch\s*\([^)]*\)\s*\{\s*\}|catch\s*\{\s*\}/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'cor-swallowed-error',
+            title: 'Swallowed Error',
+            category: 'side-effect',
+            reason: 'Empty catch block hides errors - at least log the error',
+            weight: 0.7,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['correctness', 'error-handling'],
+            evidence: { kind: 'regex', pattern: 'catch { }' },
+          }),
+        );
+      }
+
+      if (/!\s*\w+\s*&&|!!\w+\s*&&|\?\.\[|\?\.\(/.test(line)) {
+      }
+
+      if (/:\s*any\b|as\s+any\b/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'cor-any-type',
+            title: 'TypeScript any',
+            category: 'complexity',
+            reason: 'Using "any" type bypasses TypeScript safety',
+            weight: 0.3,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'maintainability',
+            confidence: 'high',
+            tags: ['correctness', 'typescript', 'type-safety'],
+            evidence: { kind: 'regex', pattern: ': any|as any' },
+          }),
+        );
+      }
+
+      if (
+        /let\s+\w+\s*=/.test(line) &&
+        /async/.test(lines.slice(Math.max(0, i - 10), i + 10).join(''))
+      ) {
+        const varName = line.match(/let\s+(\w+)\s*=/)?.[1];
+        const nearbyContent = lines.slice(i, Math.min(lines.length, i + 20)).join('\n');
+        if (varName && new RegExp(`${varName}\\s*=`).test(nearbyContent.substring(line.length))) {
+          signals.push(
+            this.createSignal({
+              id: 'cor-race-condition',
+              title: 'Potential Race Condition',
+              category: 'async',
+              reason: 'Mutable variable reassigned in async context - race condition risk',
+              weight: 0.5,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'low',
+              tags: ['correctness', 'async', 'race-condition'],
+              evidence: { kind: 'heuristic', pattern: 'let in async' },
+            }),
+          );
+        }
+      }
+
+      if (/setInterval\s*\(/.test(line)) {
+        const nearbyContent = lines.slice(i, Math.min(lines.length, i + 30)).join('\n');
+        if (!/clearInterval/.test(nearbyContent)) {
+          signals.push(
+            this.createSignal({
+              id: 'cor-interval-no-clear',
+              title: 'Interval Without Cleanup',
+              category: 'async',
+              reason: 'setInterval without clearInterval - memory leak risk',
+              weight: 0.6,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'medium',
+              tags: ['correctness', 'timer', 'memory-leak'],
+              evidence: { kind: 'heuristic', pattern: 'setInterval without clear' },
+            }),
+          );
+        }
+      }
+
+      if (/while\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\)/.test(line)) {
+        const nearbyContent = lines.slice(i, Math.min(lines.length, i + 20)).join('\n');
+        if (!/break|return|throw|maxRetries|retryCount|attempt/.test(nearbyContent)) {
+          signals.push(
+            this.createSignal({
+              id: 'cor-infinite-loop',
+              title: 'Potential Infinite Loop',
+              category: 'complexity',
+              reason: 'Infinite loop without visible exit condition',
+              weight: 0.7,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'medium',
+              tags: ['correctness', 'loop', 'infinite'],
+              evidence: { kind: 'regex', pattern: 'while(true)' },
+            }),
+          );
+        }
+      }
+
+      if (/new\s+RegExp\s*\(|\/[^/]+\/[gimsuvy]*/.test(line)) {
+        if (/\(\?=|\(\?!|\(\?<=|\(\?<!|\{[\d,]+\}.*\{[\d,]+\}/.test(line)) {
+          signals.push(
+            this.createSignal({
+              id: 'cor-complex-regex',
+              title: 'Complex Regex',
+              category: 'complexity',
+              reason: 'Complex regex pattern - risk of catastrophic backtracking',
+              weight: 0.4,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'medium',
+              tags: ['correctness', 'regex', 'performance'],
+              evidence: { kind: 'regex', pattern: 'complex regex' },
+            }),
+          );
+        }
+      }
+    }
+
+    return signals;
+  }
+
+  /**
+   * MAINT-001 to MAINT-016: Maintainability signals
+   */
+  protected detectMaintainability(): Signal[] {
+    const signals: Signal[] = [];
+    const { lines, content, filePath } = this.ctx;
+
+    const todoLines: number[] = [];
+    const commentedCodeLines: number[] = [];
+    const magicNumberLines: number[] = [];
+    const duplicatePatterns: Map<string, number[]> = new Map();
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineNum = i + 1;
+      if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+      const line = lines[i];
+
+      if (/\/\/\s*(TODO|FIXME|HACK|XXX)\b/i.test(line)) {
+        const hasTicket = /#\d+|\[[\w-]+\]|JIRA|ISSUE|TICKET/i.test(line);
+        if (!hasTicket) {
+          todoLines.push(lineNum);
+        }
+      }
+
+      if (
+        /^[\s]*\/\/\s*(?:const|let|var|function|class|if|for|while|return|import|export)/.test(line)
+      ) {
+        commentedCodeLines.push(lineNum);
+      }
+
+      if (/[^a-zA-Z0-9_](?<![\d.])[1-9]\d{2,}(?!\d)/.test(line)) {
+        if (!/\b(?:port|status|code|error|http|width|height|size|index|length)\b/i.test(line)) {
+          const numMatch = line.match(/\b(\d{3,})\b/);
+          if (numMatch) {
+            const num = parseInt(numMatch[1], 10);
+
+            if (
+              ![
+                80, 443, 3000, 8080, 8000, 200, 201, 204, 400, 401, 403, 404, 500, 1000, 1024, 2048,
+                4096,
+              ].includes(num)
+            ) {
+              magicNumberLines.push(lineNum);
+            }
+          }
+        }
+      }
+
+      if (/export\s+(?:const|function|class)\s+(\w+)/.test(line)) {
+        const exportName = line.match(/export\s+(?:const|function|class)\s+(\w+)/)?.[1];
+        if (exportName) {
+          const usageCount = (content.match(new RegExp(`\\b${exportName}\\b`, 'g')) || []).length;
+          if (usageCount === 1) {
+            signals.push(
+              this.createSignal({
+                id: 'maint-unused-export',
+                title: `Potentially Unused Export: ${exportName}`,
+                category: 'complexity',
+                reason: 'Export not used within file - verify external usage',
+                weight: 0.2,
+                lines: [lineNum],
+                snippet: this.getSnippet(lineNum),
+                signalClass: 'maintainability',
+                confidence: 'low',
+                tags: ['maintainability', 'dead-code'],
+                evidence: { kind: 'heuristic', details: { exportName } },
+              }),
+            );
+          }
+        }
+      }
+
+      if (/throw\s+new\s+Error\s*\(\s*['"][^'"]{0,20}['"]\s*\)/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'maint-vague-error',
+            title: 'Vague Error Message',
+            category: 'complexity',
+            reason: 'Error message is short - add more context for debugging',
+            weight: 0.2,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'maintainability',
+            confidence: 'medium',
+            tags: ['maintainability', 'error-message'],
+            evidence: { kind: 'regex', pattern: 'short error message' },
+          }),
+        );
+      }
+
+      const trimmed = line.trim();
+      if (trimmed.length > 30 && !/^[\s]*\/\/|^[\s]*\*|^[\s]*import|^[\s]*export/.test(line)) {
+        if (!duplicatePatterns.has(trimmed)) {
+          duplicatePatterns.set(trimmed, []);
+        }
+        duplicatePatterns.get(trimmed)!.push(lineNum);
+      }
+    }
+
+    if (todoLines.length > 0) {
+      signals.push(
+        this.createSignal({
+          id: 'maint-todo-no-ticket',
+          title: 'TODO Without Ticket',
+          category: 'complexity',
+          reason: `${todoLines.length} TODO/FIXME without ticket reference`,
+          weight: 0.1 * todoLines.length,
+          lines: todoLines.slice(0, 5),
+          signalClass: 'maintainability',
+          confidence: 'high',
+          tags: ['maintainability', 'todo'],
+          evidence: { kind: 'regex', details: { count: todoLines.length } },
+        }),
+      );
+    }
+
+    if (commentedCodeLines.length > 3) {
+      signals.push(
+        this.createSignal({
+          id: 'maint-commented-code',
+          title: 'Commented-Out Code',
+          category: 'complexity',
+          reason: `${commentedCodeLines.length} lines of commented-out code`,
+          weight: 0.2,
+          lines: commentedCodeLines.slice(0, 5),
+          signalClass: 'maintainability',
+          confidence: 'high',
+          tags: ['maintainability', 'dead-code'],
+          evidence: { kind: 'heuristic', details: { count: commentedCodeLines.length } },
+        }),
+      );
+    }
+
+    if (magicNumberLines.length > 2) {
+      signals.push(
+        this.createSignal({
+          id: 'maint-magic-numbers',
+          title: 'Magic Numbers',
+          category: 'complexity',
+          reason: `${magicNumberLines.length} magic numbers - consider named constants`,
+          weight: 0.2,
+          lines: magicNumberLines.slice(0, 5),
+          signalClass: 'maintainability',
+          confidence: 'medium',
+          tags: ['maintainability', 'magic-numbers'],
+          evidence: { kind: 'heuristic', details: { count: magicNumberLines.length } },
+        }),
+      );
+    }
+
+    for (const [pattern, lineNums] of duplicatePatterns) {
+      if (lineNums.length >= 3) {
+        signals.push(
+          this.createSignal({
+            id: 'maint-duplicate-code',
+            title: 'Duplicate Code Pattern',
+            category: 'complexity',
+            reason: `Same code pattern repeated ${lineNums.length} times`,
+            weight: 0.3,
+            lines: lineNums.slice(0, 3),
+            snippet: pattern.substring(0, 100),
+            signalClass: 'maintainability',
+            confidence: 'medium',
+            tags: ['maintainability', 'duplication'],
+            evidence: { kind: 'heuristic', details: { count: lineNums.length } },
+          }),
+        );
+        break;
+      }
+    }
+
+    if (filePath.includes('.test.') || filePath.includes('.spec.')) {
+      for (let i = 0; i < lines.length; i++) {
+        const lineNum = i + 1;
+        if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+        const line = lines[i];
+
+        if (/\.skip\s*\(|\.only\s*\(|xit\s*\(|xdescribe\s*\(/.test(line)) {
+          signals.push(
+            this.createSignal({
+              id: 'maint-test-disabled',
+              title: 'Disabled Test',
+              category: 'side-effect',
+              reason: 'Test disabled with .skip/.only - verify this is intentional',
+              weight: 0.5,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'high',
+              tags: ['maintainability', 'testing'],
+              evidence: { kind: 'regex', pattern: '.skip|.only|xit' },
+            }),
+          );
+        }
+      }
+    }
+
+    return signals;
   }
 }

@@ -485,24 +485,31 @@ dsense init --profile react
 
 ## How It Works
 
-### 1. Signal Detection
+### 1. Signal Detection (220+ Signals)
 
-DiffeSense detects **risk signals** in your code changes:
+DiffeSense detects **risk signals** in your code changes across all major categories:
 
-**Critical Signals** (can block alone):
-- Auth boundaries
-- Payment logic
-- Security-sensitive code
+**Security Signals** (SEC):
+- XSS vulnerabilities, SQL injection, command injection
+- Hardcoded secrets, weak crypto, SSRF
+- CORS misconfig, prototype pollution
 
-**Behavioral Signals** (can block combined):
+**Correctness Signals** (COR):
+- Unhandled promises, swallowed errors
+- Race conditions, infinite loops
+- TypeScript any usage, ReDoS regex
+
+**Behavioral Signals**:
 - Side effects (network, DOM, storage)
-- Async patterns
-- Error handling
+- Async patterns, timers without cleanup
+- State management issues
 
-**Maintainability Signals** (never block alone):
-- Code complexity
-- File size
-- Deep nesting
+**Maintainability Signals** (MAINT):
+- Code complexity, deep nesting
+- TODO without tickets, commented code
+- Magic numbers, duplicate code
+
+**Framework-Specific** (React, Vue, Angular, Svelte, Node.js, SSR, React Native, Electron/Tauri)
 
 ### 2. Risk Scoring
 

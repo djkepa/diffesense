@@ -1,5 +1,12 @@
 /**
- * Vue.js Signal Detector
+ * Vue.js Signal Detector - Enterprise Edition
+ *
+ * Comprehensive Vue/Nuxt detection covering:
+ * - VUE-001 to VUE-008: Vue-specific patterns
+ * - Composition API patterns
+ * - Options API patterns
+ * - Template patterns
+ * - Store patterns (Pinia/Vuex)
  */
 
 import { Signal, ChangedRange } from '../types';
@@ -22,6 +29,8 @@ export class VueDetector extends BaseDetector {
       ...this.detectCompositionAPI(),
       ...this.detectOptionsAPI(),
       ...this.detectTemplatePatterns(),
+      ...this.detectReactivityPatterns(),
+      ...this.detectStorePatterns(),
     ];
   }
 
@@ -429,6 +438,365 @@ export class VueDetector extends BaseDetector {
             confidence: 'high',
             tags: ['vue', 'refs', 'dom'],
             evidence: { kind: 'regex', pattern: '\\$refs\\.' },
+          }),
+        );
+      }
+    }
+
+    return signals;
+  }
+
+  /**
+   * VUE-003, VUE-007: Reactivity patterns
+   */
+  private detectReactivityPatterns(): Signal[] {
+    const signals: Signal[] = [];
+    const { lines, content } = this.ctx;
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineNum = i + 1;
+      if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+      const line = lines[i];
+
+      if (/Object\.assign\s*\(\s*\w+\.value|Object\.assign\s*\(\s*state/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-reactive-assign',
+            title: 'Reactive Object Assignment',
+            category: 'side-effect',
+            reason:
+              'Object.assign on reactive may lose reactivity - use spread or individual property assignment',
+            weight: 0.5,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'medium',
+            tags: ['vue', 'reactivity', 'mutation'],
+            evidence: { kind: 'regex', pattern: 'Object.assign on reactive' },
+          }),
+        );
+      }
+
+      if (/const\s*\{[^}]+\}\s*=\s*(?:props|toRefs\s*\()?/.test(line) && !/toRefs/.test(line)) {
+        if (/=\s*props/.test(line)) {
+          signals.push(
+            this.createSignal({
+              id: 'vue-props-destructure',
+              title: 'Props Destructure Without toRefs',
+              category: 'side-effect',
+              reason: 'Destructuring props loses reactivity - use toRefs(props) first',
+              weight: 0.6,
+              lines: [lineNum],
+              snippet: this.getSnippet(lineNum),
+              signalClass: 'behavioral',
+              confidence: 'high',
+              tags: ['vue', 'props', 'reactivity'],
+              evidence: { kind: 'regex', pattern: 'destructure props without toRefs' },
+              actions: [
+                {
+                  type: 'mitigation_steps',
+                  text: 'Preserve reactivity',
+                  steps: [
+                    'Use toRefs(props) before destructuring',
+                    'Or access props.propertyName directly',
+                    'Or use computed() for derived values',
+                  ],
+                },
+              ],
+            }),
+          );
+        }
+      }
+
+      if (/defineEmits\s*\(|emit\s*\(\s*['"]/.test(line)) {
+        const eventName = line.match(/emit\s*\(\s*['"]([^'"]+)['"]/)?.[1];
+        signals.push(
+          this.createSignal({
+            id: 'vue-emit-change',
+            title: eventName ? `Emit: ${eventName}` : 'Emit Definition',
+            category: 'signature',
+            reason: 'Component event contract - verify parent handlers are updated',
+            weight: 0.4,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'emit', 'contract'],
+            evidence: { kind: 'regex', pattern: 'defineEmits|emit' },
+          }),
+        );
+      }
+
+      if (/immediate\s*:\s*true/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-watch-immediate',
+            title: 'Immediate Watch',
+            category: 'side-effect',
+            reason: 'Watch with immediate runs on mount - verify initial state handling',
+            weight: 0.3,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'watch', 'immediate'],
+            evidence: { kind: 'regex', pattern: 'immediate: true' },
+          }),
+        );
+      }
+
+      if (/shallowRef\s*\(|shallowReactive\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-shallow-reactive',
+            title: 'Shallow Reactivity',
+            category: 'side-effect',
+            reason: 'Shallow reactive only tracks top-level - nested changes not reactive',
+            weight: 0.4,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'reactivity', 'shallow'],
+            evidence: { kind: 'regex', pattern: 'shallowRef|shallowReactive' },
+          }),
+        );
+      }
+
+      if (/toRaw\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-to-raw',
+            title: 'toRaw Usage',
+            category: 'side-effect',
+            reason: 'toRaw removes reactivity - changes to raw object not tracked',
+            weight: 0.4,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'reactivity', 'raw'],
+            evidence: { kind: 'regex', pattern: 'toRaw' },
+          }),
+        );
+      }
+
+      if (/triggerRef\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-trigger-ref',
+            title: 'Manual Trigger',
+            category: 'side-effect',
+            reason: 'triggerRef for manual reactivity - usually indicates design issue',
+            weight: 0.5,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'reactivity', 'manual'],
+            evidence: { kind: 'regex', pattern: 'triggerRef' },
+          }),
+        );
+      }
+
+      if (/effectScope\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-effect-scope',
+            title: 'Effect Scope',
+            category: 'async',
+            reason: 'effectScope for grouped cleanup - verify scope.stop() is called',
+            weight: 0.3,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'effectScope', 'cleanup'],
+            evidence: { kind: 'regex', pattern: 'effectScope' },
+          }),
+        );
+      }
+    }
+
+    const templateMatch = content.match(/<template>([\s\S]*?)<\/template>/);
+    if (templateMatch) {
+      const templateContent = templateMatch[1];
+      const heavyExpressions = templateContent.match(/\{\{[^}]{50,}\}\}/g) || [];
+
+      if (heavyExpressions.length > 0) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-template-heavy',
+            title: 'Heavy Template Expressions',
+            category: 'complexity',
+            reason: `${heavyExpressions.length} complex expressions in template - extract to computed`,
+            weight: 0.4,
+            signalClass: 'maintainability',
+            confidence: 'medium',
+            tags: ['vue', 'template', 'performance'],
+            evidence: { kind: 'heuristic', details: { count: heavyExpressions.length } },
+          }),
+        );
+      }
+    }
+
+    return signals;
+  }
+
+  /**
+   * VUE-008: Store patterns (Pinia/Vuex)
+   */
+  private detectStorePatterns(): Signal[] {
+    const signals: Signal[] = [];
+    const { lines, content } = this.ctx;
+
+    const isPinia = /from\s+['"]pinia['"]|defineStore/.test(content);
+    const isVuex = /from\s+['"]vuex['"]|useStore|mapState|mapGetters|mapActions/.test(content);
+
+    if (!isPinia && !isVuex) {
+      return signals;
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const lineNum = i + 1;
+      if (!this.shouldAnalyzeLine(lineNum)) continue;
+
+      const line = lines[i];
+
+      if (/defineStore\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-pinia-store',
+            title: 'Pinia Store Definition',
+            category: 'signature',
+            reason: 'Store definition changed - verify consumers are updated',
+            weight: 0.4,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum, lineNum + 5),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'pinia', 'store'],
+            evidence: { kind: 'regex', pattern: 'defineStore' },
+          }),
+        );
+      }
+
+      if (/storeToRefs\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-store-to-refs',
+            title: 'Store to Refs',
+            category: 'side-effect',
+            reason: 'storeToRefs preserves reactivity from store',
+            weight: 0.2,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'pinia', 'refs'],
+            evidence: { kind: 'regex', pattern: 'storeToRefs' },
+          }),
+        );
+      }
+
+      if (/\$patch\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-pinia-patch',
+            title: 'Store Patch',
+            category: 'side-effect',
+            reason: '$patch batches multiple state changes - verify mutations are correct',
+            weight: 0.3,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'pinia', 'mutation'],
+            evidence: { kind: 'regex', pattern: '$patch' },
+          }),
+        );
+      }
+
+      if (/\$reset\s*\(/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-pinia-reset',
+            title: 'Store Reset',
+            category: 'side-effect',
+            reason: '$reset restores initial state - verify this is intended',
+            weight: 0.4,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'pinia', 'reset'],
+            evidence: { kind: 'regex', pattern: '$reset' },
+          }),
+        );
+      }
+
+      if (/mutations\s*:\s*\{/.test(line) || /commit\s*\(\s*['"]/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-vuex-mutation',
+            title: 'Vuex Mutation',
+            category: 'side-effect',
+            reason: 'Vuex mutation changes state - verify state shape is correct',
+            weight: 0.4,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'vuex', 'mutation'],
+            evidence: { kind: 'regex', pattern: 'mutations|commit' },
+          }),
+        );
+      }
+
+      if (/actions\s*:\s*\{/.test(line) || /dispatch\s*\(\s*['"]/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-vuex-action',
+            title: 'Vuex Action',
+            category: 'async',
+            reason: 'Vuex action (async) - verify error handling and loading states',
+            weight: 0.3,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'vuex', 'action'],
+            evidence: { kind: 'regex', pattern: 'actions|dispatch' },
+          }),
+        );
+      }
+
+      if (/store\.state\.\w+\s*=/.test(line)) {
+        signals.push(
+          this.createSignal({
+            id: 'vue-store-direct-mutation',
+            title: 'Direct Store Mutation',
+            category: 'side-effect',
+            reason: 'Direct store state mutation - use actions/mutations instead',
+            weight: 0.8,
+            lines: [lineNum],
+            snippet: this.getSnippet(lineNum),
+            signalClass: 'behavioral',
+            confidence: 'high',
+            tags: ['vue', 'store', 'anti-pattern'],
+            evidence: { kind: 'regex', pattern: 'store.state.* =' },
+            actions: [
+              {
+                type: 'mitigation_steps',
+                text: 'Use proper mutation',
+                steps: [
+                  'Use store.commit() for Vuex mutations',
+                  'Use store.$patch() for Pinia',
+                  'Create action for complex state changes',
+                ],
+              },
+            ],
           }),
         );
       }

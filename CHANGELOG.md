@@ -5,6 +5,92 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-01-15
+
+### 🎯 Complete Signal Taxonomy - 220+ Signals
+
+This release adds comprehensive signal coverage based on the enterprise signal taxonomy, covering all major risk categories for JavaScript/TypeScript projects.
+
+### Added
+
+#### Security Signals (SEC-001 to SEC-024)
+- **sec-eval** - Dynamic code execution (eval/Function)
+- **sec-xss-sink** - XSS vulnerabilities (innerHTML, dangerouslySetInnerHTML)
+- **sec-command-injection** - Shell command injection risks
+- **sec-hardcoded-secret** - Hardcoded credentials detection
+- **sec-sql-injection** - SQL injection patterns
+- **sec-ssrf** - Server-side request forgery
+- **sec-prototype-pollution** - Object.assign with untrusted input
+- **sec-weak-crypto** - MD5/SHA1 usage
+- **sec-cors-wildcard** - Insecure CORS configuration
+
+#### Correctness Signals (COR-001 to COR-018)
+- **cor-unhandled-promise** - Promises without await/then
+- **cor-swallowed-error** - Empty catch blocks
+- **cor-any-type** - TypeScript any usage
+- **cor-race-condition** - Mutable state in async context
+- **cor-interval-no-clear** - setInterval without cleanup
+- **cor-infinite-loop** - Loops without exit condition
+- **cor-complex-regex** - ReDoS-prone regex patterns
+
+#### Maintainability Signals (MAINT-001 to MAINT-016)
+- **maint-todo-no-ticket** - TODO without issue reference
+- **maint-commented-code** - Dead code in comments
+- **maint-magic-numbers** - Unexplained numeric constants
+- **maint-duplicate-code** - Repeated code patterns
+- **maint-vague-error** - Error messages without context
+- **maint-test-disabled** - Skipped tests detection
+
+#### React Extended (12 new signals)
+- **react-stale-closure** - Timer capturing stale state
+- **react-set-state-unmounted** - Async setState after unmount
+- **react-index-key** - Array index as key
+- **react-derived-state** - useState from props anti-pattern
+- **react-state-mutation** - Direct state mutation
+- **react-set-state-render** - setState during render
+- **react-context-value-inline** - Inline context value
+- **react-listener-no-cleanup** - Event listener leak
+- **react-timer-no-cleanup** - Timer leak
+- **react-unstable-prop** - Inline object/array props
+- **next-router-change** - Next.js navigation
+- **next-gss-props** / **next-static-props** - Data fetching
+
+#### Vue Extended (16 new signals)
+- **vue-reactive-assign** - Object.assign on reactive
+- **vue-props-destructure** - Destructuring without toRefs
+- **vue-emit-change** - Component event contract
+- **vue-shallow-reactive** - Shallow reactivity usage
+- **vue-to-raw** - Escaping reactivity
+- **vue-trigger-ref** - Manual reactivity trigger
+- **vue-effect-scope** - Effect scope management
+- **vue-template-heavy** - Complex template expressions
+- **vue-pinia-store** / **vue-pinia-patch** / **vue-pinia-reset** - Pinia patterns
+- **vue-vuex-mutation** / **vue-vuex-action** - Vuex patterns
+- **vue-store-direct-mutation** - Anti-pattern detection
+
+#### Angular Extended (18 new signals)
+- **angular-module-imports/exports/providers** - Module wiring
+- **angular-provided-in** - Service scope
+- **angular-module-forroot/forchild** - Module configuration
+- **angular-route-guard** - Auth guard changes (security)
+- **angular-route-path** - URL route changes
+- **angular-lazy-load** - Lazy loading configuration
+- **angular-route-redirect** - Redirect configuration
+- **angular-router-navigate** - Programmatic navigation
+- **angular-route-params** - Route parameter access
+- **angular-resolver** - Route data resolver
+- **angular-zone** - NgZone manipulation
+- **angular-change-detection** - CD strategy changes
+- **angular-cdr-detectchanges/markforcheck** - Manual CD
+
+### Changed
+
+- Base detector now includes Security, Correctness, and Maintainability detection
+- All framework detectors expanded with enterprise-grade coverage
+- Signal descriptions expanded to 200+ entries
+
+---
+
 ## [1.3.0] - 2026-01-15
 
 ### 🚀 Enterprise Edition - Full Ecosystem Coverage
