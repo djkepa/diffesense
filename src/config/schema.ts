@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 
 export const SignalClassSchema = z.enum(['critical', 'behavioral', 'maintainability']);
@@ -18,9 +17,21 @@ export const ProfileNameSchema = z.enum([
   'angular',
   'backend',
 ]);
-export const ScopeSchema = z.enum(['branch', 'staged', 'worktree']);
+export const PolicyPackSchema = z.enum(['enterprise', 'startup', 'oss']);
+export const ScopeSchema = z.enum(['branch', 'staged', 'worktree', 'auto']);
 export const FormatSchema = z.enum(['console', 'markdown', 'json']);
-export const DetectorSchema = z.enum(['auto', 'generic', 'react', 'vue', 'angular', 'node']);
+export const DetectorSchema = z.enum([
+  'auto',
+  'generic',
+  'react',
+  'vue',
+  'angular',
+  'node',
+  'svelte',
+  'ssr',
+  'react-native',
+  'electron',
+]);
 
 export const ActionItemSchema = z.object({
   type: z.enum(['test', 'review', 'refactor', 'split', 'flag', 'check', 'verify', 'document']),
@@ -96,17 +107,49 @@ export const OwnershipSchema = z.object({
   defaultReviewers: z.array(z.string()).optional().describe('Default reviewers when no match'),
 });
 
+/**
+ * Severity counts for policy pack failOn configuration
+ */
+export const SeverityCountsSchema = z
+  .object({
+    CRITICAL: z.number().int().min(0).optional().describe('Max CRITICAL before fail'),
+    HIGH: z.number().int().min(0).optional().describe('Max HIGH before fail'),
+    MED: z.number().int().min(0).optional().describe('Max MED before fail'),
+    LOW: z.number().int().min(0).optional().describe('Max LOW before fail'),
+  })
+  .optional();
+
+/**
+ * FailOn configuration for when to fail the analysis
+ */
+export const FailOnSchema = z
+  .object({
+    minHighestRisk: z.number().min(0).max(10).optional().describe('Fail if highest risk >= this'),
+    minBlockers: z.number().int().min(0).optional().describe('Fail if blockers >= this'),
+    severityCounts: SeverityCountsSchema.describe('Fail based on severity counts'),
+  })
+  .optional();
+
 export const DiffeSenseConfigSchema = z.object({
+  $schema: z.string().optional().describe('JSON Schema URL'),
+
   version: z.number().int().min(1).max(1).optional().default(1).describe('Config version'),
 
+  policyPack: PolicyPackSchema.optional().describe('Policy pack: enterprise, startup, or oss'),
+
   profile: ProfileNameSchema.optional().default('minimal').describe('Base profile'),
+
+  detector: DetectorSchema.optional().default('auto').describe('Detector profile'),
 
   scope: z
     .object({
       default: ScopeSchema.optional().describe('Default analysis scope'),
+      mode: ScopeSchema.optional().describe('Scope mode (alias for default)'),
       base: z.string().optional().describe('Base branch for comparison'),
     })
     .optional(),
+
+  failOn: FailOnSchema.describe('Conditions for failing the analysis'),
 
   thresholds: z
     .object({
@@ -125,6 +168,7 @@ export const DiffeSenseConfigSchema = z.object({
       showEvidence: z.boolean().optional().describe('Show evidence in output'),
       showBlastRadius: z.boolean().optional().describe('Show blast radius'),
       topN: z.number().int().min(1).optional().describe('Number of top issues'),
+      details: z.boolean().optional().describe('Show detailed output'),
     })
     .optional(),
 

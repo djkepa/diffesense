@@ -49,6 +49,9 @@ npm install --save-dev diffesense
 # Run analysis on current branch vs main
 dsense
 
+# Use a policy pack for preset configuration
+dsense --policy-pack enterprise
+
 # Analyze with specific options
 dsense analyze --commit HEAD --format markdown
 
@@ -92,7 +95,7 @@ dsense --profile react --format markdown
 
 ### `init`
 
-Create a `.diffesense.yml` configuration file in the current directory.
+Create a `.diffesense.yml` or `.diffesense.json` configuration file in the current directory.
 
 **Syntax:**
 ```bash
@@ -101,12 +104,20 @@ dsense init [options]
 
 **Options:**
 - `-p, --profile <name>` - Base profile to use (default: `minimal`)
+- `--pack <name>` - Policy pack: `enterprise|startup|oss` (default: `startup`)
+- `--json` - Create JSON config instead of YAML
 - `--force` - Overwrite existing config file
 
 **Examples:**
 ```bash
-# Create config with minimal profile
+# Create config with startup policy pack (default)
 dsense init
+
+# Create config with enterprise pack
+dsense init --pack enterprise
+
+# Create JSON config for OSS project
+dsense init --pack oss --json
 
 # Create config with React profile
 dsense init --profile react
@@ -116,7 +127,33 @@ dsense init --force
 ```
 
 **Output:**
-Creates `.diffesense.yml` with default configuration and helpful comments.
+Creates `.diffesense.yml` (or `.diffesense.json` with `--json`) with pre-configured settings.
+
+---
+
+### `packs`
+
+List available policy packs and their configurations.
+
+**Syntax:**
+```bash
+dsense packs [options]
+```
+
+**Options:**
+- `--verbose` - Show detailed configuration for each pack
+
+**Examples:**
+```bash
+# List all packs
+dsense packs
+
+# Show detailed configuration
+dsense packs --verbose
+```
+
+**Output:**
+Shows available policy packs (enterprise, startup, oss) with their fail conditions and category weights.
 
 ---
 
@@ -453,6 +490,56 @@ dsense --range main..feature-branch
 ```
 
 **Note:** Automatically sets `--scope range`
+
+---
+
+### Policy Pack Options
+
+Pre-configured policy packs for different use cases.
+
+#### `--policy-pack <name>`
+
+Policy pack to use for fail conditions and category weights.
+
+**Built-in Policy Packs:**
+
+| Pack | Fail Threshold | Best For |
+|------|----------------|----------|
+| `startup` | Risk ≥ 8.8, 1 CRITICAL | Fast-moving teams (default) |
+| `enterprise` | Risk ≥ 7.5, 1 CRITICAL or 2+ HIGH | Strict CI gates |
+| `oss` | Risk ≥ 9.2, 1 CRITICAL | Open-source projects |
+
+**Examples:**
+```bash
+# Use startup pack (default)
+dsense --policy-pack startup
+
+# Use enterprise pack for strict CI
+dsense --policy-pack enterprise --format markdown --details
+
+# Use OSS pack for open-source
+dsense --policy-pack oss
+```
+
+**Pack Features:**
+
+**Startup (default):**
+- Fail threshold: 8.8
+- Catches critical risks without noise
+- Maintainability weight: 0.8×
+
+**Enterprise:**
+- Fail threshold: 7.5
+- Fails on 1 CRITICAL or 2+ HIGH
+- Security weight: 1.3×
+- Details enabled by default
+
+**OSS:**
+- Fail threshold: 9.2
+- Focus on supply-chain security
+- Maintainability weight: 0.6×
+
+📖 **[Full Policy Pack Documentation →](POLICY_PACKS.md)**
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "name": "diffesense",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Framework-agnostic JavaScript/TypeScript change-risk engine for PR reviews",
   "bin": {
     "dsense": "dist/cli/dsense.js"

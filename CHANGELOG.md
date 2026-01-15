@@ -5,7 +5,62 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0] - 2026-01-15
+## [1.5.0]
+
+### 📦 Policy Packs - Enterprise-Ready Configuration
+
+This release introduces **Policy Packs** - pre-configured policies for different use cases. Start in 60 seconds without configuring individual thresholds!
+
+### Added
+
+#### Policy Packs
+- **enterprise** - Strict CI gating for quality/security (fail >= 7.5, 1 CRITICAL or 2+ HIGH)
+- **startup** - Pragmatic defaults for fast-moving teams (fail >= 8.8, 1 CRITICAL)
+- **oss** - Open-source friendly, focus on supply-chain (fail >= 9.2, focus security)
+
+#### CLI Commands
+- `--policy-pack <name>` - Select policy pack (enterprise|startup|oss)
+- `dsense packs` - List available policy packs
+- `dsense packs --details` - Show detailed pack configuration
+- `dsense init --pack <name>` - Initialize config with specific pack
+- `dsense init --json` - Create JSON config instead of YAML
+
+#### Configuration
+- `policyPack` field in config file
+- `failOn.minHighestRisk` - Fail if highest risk exceeds threshold
+- `failOn.minBlockers` - Fail if blocker count exceeds threshold
+- `failOn.severityCounts` - Fail based on CRITICAL/HIGH/MED/LOW counts
+- Category weights per pack (security, ssrBoundary, apiContract, etc.)
+
+#### Documentation
+- New `docs/POLICY_PACKS.md` - Complete policy pack documentation
+- Updated CLI reference with policy pack options
+- Updated README with quick start for policy packs
+
+### Changed
+- Default policy pack is `startup` (pragmatic, low noise)
+- GitHub Actions template now uses enterprise pack by default
+- `dsense init` generates policy-pack-aware configuration
+
+### Example Usage
+
+```bash
+# Local development (auto-detect)
+npx diffesense
+
+# Enterprise CI gate
+npx diffesense --policy-pack enterprise --format markdown --details
+
+# OSS project
+npx diffesense --policy-pack oss
+
+# Initialize config
+dsense init --pack enterprise --json
+```
+
+---
+
+## [1.4.0]
 
 ### 🎯 Complete Signal Taxonomy - 220+ Signals
 
@@ -91,7 +146,7 @@ This release adds comprehensive signal coverage based on the enterprise signal t
 
 ---
 
-## [1.3.0] - 2026-01-15
+## [1.3.0]
 
 ### 🚀 Enterprise Edition - Full Ecosystem Coverage
 
@@ -143,7 +198,7 @@ This release transforms DiffeSense into a comprehensive change-risk intelligence
 
 ---
 
-## [1.2.2] - 2026-01-15
+## [1.2.2]
 
 ### Added
 
@@ -186,7 +241,7 @@ This release transforms DiffeSense into a comprehensive change-risk intelligence
 
 ---
 
-## [1.2.1] - 2026-01-15
+## [1.2.1]
 
 ### Added
 - **Clickable file paths** - Absolute paths in console output that can be clicked in most terminals to open files
@@ -206,7 +261,7 @@ This release transforms DiffeSense into a comprehensive change-risk intelligence
 
 ---
 
-## [1.2.0] - 2026-01-15
+## [1.2.0]
 
 ### Added
 
@@ -233,13 +288,13 @@ This release transforms DiffeSense into a comprehensive change-risk intelligence
 
 ---
 
-## [1.1.1] - 2026-01-15
+## [1.1.1]
 
 ### Changed
 - **README** - Added logo and centered header
 - **Documentation** - Updated all output examples to v1.1.0 format
 
-## [1.1.0] - 2026-01-15
+## [1.1.0]
 
 ### Added
 
@@ -281,7 +336,7 @@ This release transforms DiffeSense into a comprehensive change-risk intelligence
 - **API schema** - Formal JSON schema with severity enum
 - **Output examples** - Professional snapshots for all formats
 
-## [1.0.1] - 2026-01-09
+## [1.0.1]
 
 ### Changed
 - **Package name** - Changed from `@diffesense/cli` to `diffesense` (unscoped package)
@@ -290,7 +345,7 @@ This release transforms DiffeSense into a comprehensive change-risk intelligence
 ### Fixed
 - npm publish now works without requiring organization scope
 
-## [1.0.0] - 2026-01-09
+## [1.0.0]
 
 ### 🎉 Initial Release
 

@@ -107,11 +107,41 @@ npm install -g diffesense
 # Just run it - auto-detects working/staged/branch!
 dsense
 
-# Or be explicit:
+# Choose your policy pack:
+dsense --policy-pack startup     # default: pragmatic
+dsense --policy-pack enterprise  # strict CI gate
+dsense --policy-pack oss         # open-source friendly
+
+# Or be explicit about scope:
 dsense --scope working   # uncommitted changes
 dsense --scope staged    # staged changes (pre-commit)
 dsense --scope branch    # committed changes (CI/PR)
 ```
+
+---
+
+## 📦 Policy Packs (New in v1.5!)
+
+Pre-configured policies for different use cases. **Start in 60 seconds without configuring thresholds.**
+
+| Pack | Fail Threshold | Best For |
+|------|----------------|----------|
+| **startup** (default) | Risk ≥ 8.8 | Fast-moving teams, low noise |
+| **enterprise** | Risk ≥ 7.5, 1 CRITICAL or 2+ HIGH | Strict CI gates, security-first |
+| **oss** | Risk ≥ 9.2 | Open-source, supply-chain focus |
+
+```bash
+# Quick CI setup with enterprise gating
+dsense --policy-pack enterprise --format markdown --details
+
+# Initialize config with your preferred pack
+dsense init --pack enterprise
+
+# List all packs and their settings
+dsense packs --details
+```
+
+📖 **[Policy Packs Documentation →](docs/POLICY_PACKS.md)**
 
 ---
 

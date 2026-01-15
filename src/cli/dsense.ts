@@ -19,6 +19,13 @@ import { formatMarkdownOutput } from '../output/formatters/dsMarkdown';
 import { formatJsonOutput } from '../output/formatters/dsJson';
 import { DetectorProfile } from '../signals';
 import { VERSION } from '../version';
+import {
+  PolicyPackName,
+  isValidPolicyPack,
+  getAvailablePolicyPacks,
+  getPolicyPack,
+} from '../policy/packs';
+import { applyPolicyPack, formatPolicyPackInfo } from '../policy/packs/loader';
 
 const program = new Command();
 
@@ -34,7 +41,12 @@ program
   .option('-r, --range <range>', 'Git commit range (e.g. HEAD~5..HEAD or abc123..def456)')
   .option('--commit <sha>', 'Analyze specific commit (e.g. HEAD or abc123)')
   .option('-p, --profile <name>', 'Profile: minimal|strict|react|vue|angular|backend')
-  .option('-d, --detector <type>', 'Detector: auto|generic|react|vue|angular|node', 'auto')
+  .option('--policy-pack <name>', 'Policy pack: enterprise|startup|oss (default: startup)')
+  .option(
+    '-d, --detector <type>',
+    'Detector: auto|generic|react|vue|angular|node|svelte|ssr',
+    'auto',
+  )
   .option('-f, --format <type>', 'Output format: console|markdown|json', 'console')
   .option('-c, --config <path>', 'Path to config file')
   .option('-t, --threshold <n>', 'Override fail threshold (0-10)', parseFloat)
@@ -64,9 +76,12 @@ program
   .command('init')
   .description('Create .diffesense.yml config file')
   .option('-p, --profile <name>', 'Base profile', 'minimal')
+  .option('--pack <name>', 'Policy pack: enterprise|startup|oss', 'startup')
+  .option('--json', 'Create JSON config instead of YAML')
   .option('--force', 'Overwrite existing config')
   .action((options) => {
-    const configPath = path.join(process.cwd(), '.diffesense.yml');
+    const ext = options.json ? '.json' : '.yml';
+    const configPath = path.join(process.cwd(), `.diffesense${ext}`);
 
     if (fs.existsSync(configPath) && !options.force) {
       console.error(chalk.yellow('Config file already exists. Use --force to overwrite.'));
@@ -74,25 +89,65 @@ program
     }
 
     const profile = options.profile || 'minimal';
-    const configContent = `# DiffeSense Configuration
+    const policyPack = options.pack || 'startup';
+
+    if (options.json) {
+      // Generate JSON config
+      const jsonConfig = {
+        $schema: 'https://diffesense.dev/schemas/config-1.0.json',
+        policyPack,
+        detector: 'auto',
+        failOn: {
+          minHighestRisk: policyPack === 'enterprise' ? 7.5 : policyPack === 'startup' ? 8.8 : 9.2,
+          minBlockers: 1,
+        },
+        output: {
+          format: 'console',
+          topN: policyPack === 'enterprise' ? 15 : 10,
+          details: policyPack === 'enterprise',
+        },
+        scope: {
+          mode: 'auto',
+        },
+      };
+      fs.writeFileSync(configPath, JSON.stringify(jsonConfig, null, 2));
+      console.log(chalk.green(`✓ Created .diffesense.json with policy pack: ${policyPack}`));
+    } else {
+      // Generate YAML config
+      const configContent = `# DiffeSense Configuration
 # Framework-agnostic JavaScript/TypeScript change-risk engine
 version: 1
+
+# Policy pack: enterprise | startup | oss
+# - enterprise: Strict CI gating for quality/security
+# - startup: Pragmatic, catches big risks without noise
+# - oss: Open-source friendly, focus on supply-chain
+policyPack: ${policyPack}
 
 # Base profile: minimal | strict | react | vue | angular | backend
 profile: ${profile}
 
+# Detector: auto | generic | react | vue | angular | node | svelte | ssr
+detector: auto
+
 # Scope defaults
 scope:
-  default: branch
+  mode: auto
   base: main
 
-# Context lines around changes for analysis (default: 5)
-# contextLines: 5
+# Fail conditions (overrides policy pack defaults)
+# failOn:
+#   minHighestRisk: 8.0
+#   minBlockers: 1
+#   severityCounts:
+#     CRITICAL: 1
+#     HIGH: 2
 
-# Threshold overrides
-# thresholds:
-#   failAboveRisk: 7.0
-#   warnAboveRisk: 5.0
+# Output settings
+# output:
+#   format: console
+#   topN: 10
+#   details: false
 
 # Custom ignore patterns (extend defaults)
 # ignore:
@@ -108,35 +163,6 @@ scope:
 #         - "npm test -- --grep auth"
 #       reviewers:
 #         - "@security-team"
-#     - pattern: "**/payments/**"
-#       commands:
-#         - "npm test -- --grep payment"
-#       reviewers:
-#         - "@payments-team"
-
-# Custom detection patterns
-# customPatterns:
-#   - id: my-pattern
-#     name: My Custom Pattern
-#     description: Detects something specific
-#     match: "mySpecificFunction\\("
-#     category: side-effect
-#     signalType: my-custom-signal
-#     weight: 0.5
-#     signalClass: behavioral
-
-# Custom rules (extend profile rules)
-# rules:
-#   - id: custom-rule
-#     when:
-#       riskGte: 7.0
-#       pathMatches: ["src/critical/**"]
-#       signalTypes: ["auth-boundary"]
-#     then:
-#       severity: blocker
-#       actions:
-#         - type: review
-#           text: "This file requires senior review"
 
 # Temporary exceptions
 # exceptions:
@@ -146,8 +172,21 @@ scope:
 #     reason: "Legacy code migration in progress"
 `;
 
-    fs.writeFileSync(configPath, configContent);
-    console.log(`Created .diffesense.yml with profile: ${profile}`);
+      fs.writeFileSync(configPath, configContent);
+      console.log(chalk.green(`✓ Created .diffesense.yml with policy pack: ${policyPack}`));
+    }
+
+    console.log('');
+    console.log(chalk.dim('Quick start:'));
+    console.log(
+      chalk.cyan('  dsense                              ') + chalk.dim('# auto-detect changes'),
+    );
+    console.log(
+      chalk.cyan('  dsense --policy-pack enterprise     ') + chalk.dim('# strict CI mode'),
+    );
+    console.log(
+      chalk.cyan('  dsense --format markdown            ') + chalk.dim('# PR comment format'),
+    );
   });
 
 program
@@ -211,6 +250,59 @@ program
   .description('Check environment and configuration')
   .action(() => {
     runDoctor();
+  });
+
+program
+  .command('packs')
+  .description('List available policy packs')
+  .option('--verbose', 'Show detailed configuration for each pack')
+  .action((options) => {
+    const showDetails = options.verbose === true;
+
+    console.log(chalk.bold('Available Policy Packs'));
+    console.log('=======================\n');
+
+    for (const packName of getAvailablePolicyPacks()) {
+      const pack = getPolicyPack(packName);
+      const isDefault = packName === 'startup';
+
+      console.log(
+        chalk.cyan.bold(packName.toUpperCase()) + (isDefault ? chalk.dim(' (default)') : ''),
+      );
+      console.log(chalk.dim(`  ${pack.description}`));
+
+      if (showDetails) {
+        console.log('');
+        console.log('  Fail conditions:');
+        console.log(`    • Highest risk >= ${pack.failOn.minHighestRisk}`);
+        console.log(`    • Blockers >= ${pack.failOn.minBlockers}`);
+        if (pack.failOn.severityCounts.CRITICAL) {
+          console.log(`    • CRITICAL files >= ${pack.failOn.severityCounts.CRITICAL}`);
+        }
+        if (pack.failOn.severityCounts.HIGH) {
+          console.log(`    • HIGH files >= ${pack.failOn.severityCounts.HIGH}`);
+        }
+
+        console.log('');
+        console.log('  Category weights:');
+        for (const [cat, weight] of Object.entries(pack.weights)) {
+          const indicator =
+            weight > 1 ? chalk.green('↑') : weight < 1 ? chalk.yellow('↓') : chalk.dim('→');
+          const weightColor = weight > 1 ? chalk.green : weight < 1 ? chalk.yellow : chalk.dim;
+          console.log(`    ${indicator} ${cat}: ${weightColor(weight.toFixed(1))}`);
+        }
+
+        console.log('');
+        console.log('  Defaults:');
+        console.log(`    • topN: ${pack.defaults.topN}`);
+        console.log(`    • details: ${pack.defaults.details}`);
+      }
+      console.log('');
+    }
+
+    console.log(chalk.dim('Usage:'));
+    console.log(chalk.cyan('  dsense --policy-pack enterprise'));
+    console.log(chalk.cyan('  dsense init --pack oss'));
   });
 
 program.parse();
@@ -562,8 +654,9 @@ jobs:
       - name: Run Analysis
         id: diffesense
         run: |
-          dsense --base \${{ github.event.pull_request.base.ref }} --format json > report.json || true
-          dsense --base \${{ github.event.pull_request.base.ref }} --format markdown > report.md || true
+          # Use enterprise policy pack for strict CI gating
+          dsense --base \${{ github.event.pull_request.base.ref }} --policy-pack enterprise --format json > report.json || true
+          dsense --base \${{ github.event.pull_request.base.ref }} --policy-pack enterprise --format markdown --details > report.md || true
 
           EXIT_CODE=\$(cat report.json | jq -r '.summary.exitCode // 0')
           RISK=\$(cat report.json | jq -r '.summary.highestRisk // 0')
@@ -735,6 +828,7 @@ interface CLIAnalysisOptions {
   commit?: string;
   range?: string;
   profile?: string;
+  policyPack?: string;
   detector?: string;
   format?: string;
   config?: string;
@@ -778,6 +872,13 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
   const quiet = options.quiet || false;
   const determinismCheck = options.determinismCheck || false;
   const explainIgnoreFlag = options.explainIgnore || false;
+
+  const policyPackName = options.policyPack as PolicyPackName | undefined;
+  const { pack: activePack, effectiveConfig } = applyPolicyPack(policyPackName);
+
+  if (!quiet && policyPackName && isValidPolicyPack(policyPackName)) {
+    console.log(chalk.dim(`Using policy pack: ${activePack.name}`));
+  }
 
   let resolvedScope: DiffScope;
   let scopeAutoDetected = false;
@@ -831,6 +932,8 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
     };
   }
 
+  const effectiveThreshold = options.threshold ?? effectiveConfig.failThreshold;
+
   const result = await analyze({
     cwd,
     scope: resolvedScope,
@@ -840,7 +943,7 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
     profile: options.profile,
     detector: options.detector as DetectorProfile,
     configPath: options.config,
-    threshold: options.threshold,
+    threshold: effectiveThreshold,
     includeTests: options.includeTests,
     includeConfig: options.includeConfig,
     contextLines: options.context,
@@ -928,9 +1031,10 @@ ${chalk.yellow('Tip:')} Run DiffeSense from the git root directory:
 
   const outputConfig = {
     showAll: options.showAll || false,
-    topN: options.top || 3,
-    details: options.details || false,
+    topN: options.top ?? effectiveConfig.topN,
+    details: options.details ?? effectiveConfig.details,
     quiet,
+    policyPack: activePack.name,
   };
 
   let output: string;
