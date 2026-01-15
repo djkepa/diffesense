@@ -1,3 +1,7 @@
+<div align="center">
+
+<img src="https://i.ibb.co/RkSKQT68/diffesense-logo.png" alt="DiffeSense Logo" width="200"/>
+
 # DiffeSense
 
 **Know your risk before you merge.**
@@ -7,6 +11,8 @@ DiffeSense analyzes code changes in your Pull Requests and tells you which files
 [![npm version](https://img.shields.io/npm/v/diffesense.svg)](https://www.npmjs.com/package/diffesense)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/node/v/diffesense.svg)](https://nodejs.org)
+
+</div>
 
 ---
 
