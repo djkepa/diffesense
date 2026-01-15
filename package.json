@@ -47,7 +47,7 @@
     "email": "contact@diffesense.dev",
     "url": "https://github.com/djkepa"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/djkepa/diffesense.git"

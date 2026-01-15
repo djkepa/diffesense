@@ -1,408 +1,133 @@
 <div align="center">
 
-<img src="https://i.ibb.co/RkSKQT68/diffesense-logo.png" alt="DiffeSense Logo" width="200"/>
+<img src="https://i.ibb.co/RkSKQT68/diffesense-logo.png" alt="DiffeSense Logo" width="180"/>
 
 # DiffeSense
 
 **Know your risk before you merge.**
 
-DiffeSense analyzes code changes in your Pull Requests and tells you which files are risky and what to do about them. It's not a linter—it's a risk engine that helps you make better merge decisions.
+Change-risk intelligence for JavaScript/TypeScript pull requests.
 
 [![npm version](https://img.shields.io/npm/v/diffesense.svg)](https://www.npmjs.com/package/diffesense)
 [![npm downloads](https://img.shields.io/npm/dm/diffesense.svg)](https://www.npmjs.com/package/diffesense)
-[![CI](https://github.com/djkepa/diffesense/workflows/CI/badge.svg)](https://github.com/djkepa/diffesense/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+[Quick Start](#quick-start) · [Documentation](docs/) · [Policy Packs](#policy-packs)
 
 </div>
 
 ---
 
-## 🚀 Quick Start (60 seconds)
+## What is DiffeSense?
 
-### GitHub Actions (Copy & Paste)
+DiffeSense analyzes your code changes and tells you **which files are risky** and **what to do about them**.
 
-Create `.github/workflows/diffesense.yml`:
-
-```yaml
-name: DiffeSense Risk Analysis
-
-on:
-  pull_request:
-    branches: [main, master]
-
-jobs:
-  risk-analysis:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-      
-      - name: Run DiffeSense
-        run: npx diffesense@latest --format markdown > report.md
-        continue-on-error: true
-      
-      - name: Comment PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('report.md', 'utf8');
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const botComment = comments.find(c => 
-              c.user.type === 'Bot' && c.body.includes('<!-- diffesense-report -->')
-            );
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: report
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: report
-              });
-            }
-```
-
-**That's it!** Next PR will get automated risk analysis comments.
-
-### GitLab CI (Copy & Paste)
-
-Add to your `.gitlab-ci.yml`:
-
-```yaml
-diffesense:
-  stage: test
-  image: node:18
-  script:
-    - npx diffesense@latest --format markdown
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  allow_failure: false
-```
-
-### Local Development
-
-```bash
-# Install globally
-npm install -g diffesense
-
-# Just run it - auto-detects working/staged/branch!
-dsense
-
-# Choose your policy pack:
-dsense --policy-pack startup     # default: pragmatic
-dsense --policy-pack enterprise  # strict CI gate
-dsense --policy-pack oss         # open-source friendly
-
-# Or be explicit about scope:
-dsense --scope working   # uncommitted changes
-dsense --scope staged    # staged changes (pre-commit)
-dsense --scope branch    # committed changes (CI/PR)
-```
-
----
-
-## 📦 Policy Packs (New in v1.5!)
-
-Pre-configured policies for different use cases. **Start in 60 seconds without configuring thresholds.**
-
-| Pack | Fail Threshold | Best For |
-|------|----------------|----------|
-| **startup** (default) | Risk ≥ 8.8 | Fast-moving teams, low noise |
-| **enterprise** | Risk ≥ 7.5, 1 CRITICAL or 2+ HIGH | Strict CI gates, security-first |
-| **oss** | Risk ≥ 9.2 | Open-source, supply-chain focus |
-
-```bash
-# Quick CI setup with enterprise gating
-dsense --policy-pack enterprise --format markdown --details
-
-# Initialize config with your preferred pack
-dsense init --pack enterprise
-
-# List all packs and their settings
-dsense packs --details
-```
-
-📖 **[Policy Packs Documentation →](docs/POLICY_PACKS.md)**
-
----
-
-## 📸 See It In Action
-
-**PR Comment Example:**
-
-<img src="https://i.ibb.co/sample-pr-comment.png" alt="DiffeSense PR Comment" width="700"/>
-
-**Console Output:**
+It's not a linter. It's a **risk engine** that helps you make better merge decisions.
 
 ```
-DiffeSense 1.1.1  •  risk gate for code changes
-Summary
-- Changed: 8 files  |  Analyzed: 8  |  Ignored: 0  |  Warnings: 0
-- Highest risk: 8.9/10  |  Blockers: 1  |  Exit code: 1
+$ dsense
+
+DiffeSense  •  risk gate for code changes
 
 Top 3 risky files
-Risk  Sev       Blast  File                      Why (top reasons)
+Risk  Sev       Blast  File                      Why
 8.9   CRITICAL  12     src/auth/middleware.ts    auth-boundary; async patterns
 7.2   HIGH      6      src/api/client.ts         error handling weak
 6.8   HIGH      3      src/components/Cart.tsx   heavy component
+
+Exit code: 1 (FAIL)
 ```
 
----
-
-## The Problem
-
-You're reviewing a PR with 15 changed files. Which ones actually matter? Which ones could break production?
-
-**Traditional tools tell you:**
-- "Missing semicolon on line 42" ❌
-- "Unused variable" ❌
-- "Prefer const over let" ❌
-
-**DiffeSense tells you:**
-- "This auth file has 23 dependents and 4 side-effects" ✅
-- "Run: `npm test -- auth`" ✅
-- "Review: @security-team" ✅
+**Traditional tools:** "Missing semicolon on line 42"  
+**DiffeSense:** "This auth file has 12 dependents and 4 side-effects. Run `npm test -- auth`"
 
 ---
 
 ## Quick Start
 
-```bash
-# Install
-npm install -g diffesense
-
-# Run on your PR
-dsense
-
-# That's it. Top 3 risky files, concrete actions.
-```
-
-📖 **[Complete Documentation →](docs/QUICK_START.md)**
-
----
-
-## What You Get
-
-```
-DiffeSense 1.1.0  •  risk gate for code changes
-Repo: my-app  |  CWD: /home/user/my-app
-Scope: branch  |  Base: main  |  Range: main...HEAD
-Profile: minimal  |  Detector: auto
-Config: defaults  |  Schema: 1.0.0
-
-Summary
-- Changed: 8 files  |  Analyzed: 8  |  Ignored: 0  |  Warnings: 0
-- Highest risk: 8.9/10  |  Blockers: 1  |  Exit code: 1
-
-Top 3 risky files
-Risk  Sev       Blast  File                      Why (top reasons)
-8.9   CRITICAL  12     src/auth/middleware.ts    auth-boundary; async patterns
-7.2   HIGH      6      src/api/client.ts         error handling weak
-6.8   HIGH      3      src/components/Cart.tsx   heavy component
-```
-
-**Key Features:**
-- 🎯 **Top 3 by Default** - No noise, only what matters
-- 🔇 **Smart Ignore** - Lock files, generated code automatically filtered
-- ⚖️ **Signal Classes** - Maintainability issues can't block PRs alone
-- 🎬 **Concrete Actions** - Not "add tests", but `npm test -- auth`
-- 🔄 **CI Ready** - GitHub Actions, GitLab CI, Jenkins templates included
-
----
-
-## Why DiffeSense?
-
-### For Developers
-
-**Before DiffeSense:**
-```
-You: "Is this PR safe to merge?"
-Linter: "You have 47 warnings"
-You: "...which ones matter?"
-Linter: "¯\_(ツ)_/¯"
-```
-
-**With DiffeSense:**
-```
-You: "Is this PR safe to merge?"
-DiffeSense: "FAIL ✖ - auth file changed, 12 dependents"
-You: "What should I do?"
-DiffeSense: "Run: npm test -- auth, Review: @security-team"
-```
-
-### For Teams
-
-- ✅ **Consistent Reviews** - Same criteria every time
-- ✅ **Faster Decisions** - Know what to focus on
-- ✅ **Better Context** - Understand impact before merging
-- ✅ **Actionable** - Clear next steps, not vague advice
-
----
-
-## 💡 Real-World Use Cases
-
-###  Startup (5-10 developers)
-**Problem:** Junior devs pushing risky changes to production  
-**Solution:** DiffeSense blocks PRs with CRITICAL auth/payment changes  
-**Result:** Zero production incidents in 3 months
-
-###  Enterprise (50+ developers)
-**Problem:** Code reviews taking 2-3 days, bottleneck on senior devs  
-**Solution:** DiffeSense auto-comments on PRs, seniors focus on HIGH/CRITICAL only  
-**Result:** Review time down to 4 hours, 70% fewer bugs in production
-
-###  Open Source Project
-**Problem:** Maintainers overwhelmed with PRs, can't assess risk quickly  
-**Solution:** DiffeSense badge on PRs (✅ PASS / ❌ FAIL)  
-**Result:** Contributors self-review before requesting merge
-
-###  Security-Critical App (FinTech/HealthTech)
-**Problem:** Need audit trail for every code change  
-**Solution:** DiffeSense JSON output → compliance dashboard  
-**Result:** Passed SOC2 audit, clear risk documentation
-
----
-
-## Installation
-
-```bash
-# Global (recommended)
-npm install -g diffesense
-
-# Project-local
-npm install --save-dev diffesense
-
-# Or use without installing
-npx diffesense
-```
-
----
-
-## Usage
-
-### Basic Analysis
-
-```bash
-# Auto-detect: analyzes staged → working → branch
-dsense
-
-# Analyze uncommitted changes (local development)
-dsense --scope working
-
-# Analyze staged files (pre-commit hook)
-dsense --scope staged
-
-# Analyze committed changes (CI/PR)
-dsense --scope branch
-
-# Analyze last commit
-dsense --commit HEAD
-
-# Analyze last 5 commits
-dsense --range HEAD~5..HEAD
-```
-
-### Different Profiles
-
-```bash
-# React app
-dsense --profile react
-
-# Vue app
-dsense --profile vue
-
-# Node.js backend
-dsense --profile backend
-
-# Strict rules
-dsense --profile strict
-```
-
-### Output Formats
-
-```bash
-# Console (default, with colors)
-dsense
-
-# Markdown (for PR comments)
-dsense --format markdown
-
-# JSON (for CI/CD)
-dsense --format json
-
-# Detailed analysis
-dsense --details
-```
-
----
-
-## CI Integration
-
-### GitHub Actions
-
-```bash
-# Generate workflow
-dsense ci github > .github/workflows/diffesense.yml
-```
-
-Or manually:
+### GitHub Actions (60 seconds)
 
 ```yaml
+# .github/workflows/diffesense.yml
 name: DiffeSense
 on:
   pull_request:
-    branches: [main, master]
+    branches: [main]
 
 jobs:
-  risk-analysis:
+  analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Run DiffeSense
-        run: npx diffesense --format markdown
+      - run: npx diffesense@latest --policy-pack enterprise --format markdown
 ```
 
-### GitLab CI
+### Local Development
 
 ```bash
-# Generate job
-dsense ci gitlab > .gitlab-ci-diffesense.yml
-```
-
-### Pre-commit Hook
-
-```bash
-# .husky/pre-commit
-npx diffesense --scope staged --quiet
+npm install -g diffesense
+dsense                           # auto-detect changes
+dsense --policy-pack enterprise  # strict CI mode
+dsense --format markdown         # PR comment format
 ```
 
 ---
 
-## Programmatic API (v1.1.0+)
+## Policy Packs
 
-Use DiffeSense as a library in your own tools:
+Pre-configured policies for different use cases. Start in 60 seconds.
+
+| Pack | Fail Threshold | Best For |
+|------|----------------|----------|
+| **startup** (default) | Risk ≥ 8.8 | Fast-moving teams |
+| **enterprise** | Risk ≥ 7.5, 2+ HIGH | Strict CI gates |
+| **oss** | Risk ≥ 9.2 | Open-source projects |
+
+```bash
+dsense --policy-pack enterprise
+dsense init --pack enterprise
+dsense packs --verbose
+```
+
+---
+
+## Key Features
+
+- **220+ Risk Signals** — Security, correctness, performance, framework-specific
+- **Blast Radius** — See how many files depend on your changes
+- **Smart Ignore** — Lockfiles and generated code filtered automatically
+- **Actionable Output** — Not "add tests", but `npm test -- auth`
+- **CI Ready** — GitHub Actions, GitLab CI templates included
+- **Zero Config** — Works out of the box with sensible defaults
+
+---
+
+## Supported Frameworks
+
+| Frontend | Backend | Mobile/Desktop |
+|----------|---------|----------------|
+| React, Next.js | Node.js, Express | React Native, Expo |
+| Vue, Nuxt | NestJS, Fastify | Electron, Tauri |
+| Angular | GraphQL, REST | |
+| Svelte, SvelteKit | WebSocket, SSE | |
+
+---
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Quick Start](docs/QUICK_START.md) | Get started in 5 minutes |
+| [CLI Reference](docs/CLI_REFERENCE.md) | All commands and options |
+| [Policy Packs](docs/POLICY_PACKS.md) | Enterprise/Startup/OSS configs |
+| [Detectors](docs/DETECTORS.md) | 220+ signal reference |
+| [Output Formats](docs/OUTPUT_FORMATS.md) | Console, Markdown, JSON |
+
+---
+
+## Programmatic API
 
 ```typescript
 import { analyze } from 'diffesense';
@@ -411,320 +136,39 @@ const result = await analyze({
   cwd: '/path/to/repo',
   scope: 'branch',
   base: 'main',
-  profile: 'react',
 });
 
-// Structured result - no console.log, no process.exit
-console.log(`Exit code: ${result.exitCode}`);
+console.log(`Exit: ${result.exitCode}`);
 console.log(`Blockers: ${result.summary.blockerCount}`);
-console.log(`Highest risk: ${result.summary.highestRisk}`);
-
-// Iterate over risky files
-for (const file of result.files) {
-  console.log(`${file.path}: ${file.severity} (${file.riskScore})`);
-}
-
-// Check ignored files
-for (const ignored of result.ignoredFiles) {
-  console.log(`Skipped: ${ignored.path} - ${ignored.reason}`);
-}
-```
-
-### API Contract
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `success` | boolean | Whether analysis completed |
-| `exitCode` | 0 \| 1 \| 2 | PASS / FAIL / ERROR |
-| `meta` | object | Analysis context (scope, base, profile, etc.) |
-| `summary` | object | Statistics (changedCount, blockerCount, etc.) |
-| `files` | array | Analyzed files with risk scores and severity |
-| `ignoredFiles` | array | Skipped files with reasons |
-| `warnings` | array | Config/analysis warnings |
-
-### Severity Levels
-
-| Severity | Risk Score | Description |
-|----------|------------|-------------|
-| `CRITICAL` | ≥ 8.0 | Immediate attention required |
-| `HIGH` | 6.0-7.9 | Should be reviewed carefully |
-| `MED` | 3.0-5.9 | Moderate risk |
-| `LOW` | < 3.0 | Low risk |
-
-📖 **[Full API Documentation →](docs/api-schema.json)**
-
----
-
-## Exit Codes
-
-| Code | Status | Meaning | CI Behavior |
-|------|--------|---------|-------------|
-| **0** | ✔ PASS | No blockers, safe to merge | Pipeline continues |
-| **1** | ✖ FAIL | Blockers detected | Pipeline fails, merge blocked |
-| **2** | ✖ ERROR | Internal error | Pipeline fails, investigate |
-
-**Deterministic:** Same input → same exit code, always.
-
----
-
-## Configuration
-
-Create `.diffesense.yml` in your project root:
-
-```yaml
-# DiffeSense Configuration
-version: 1
-
-# Base profile
-profile: react
-
-# Scope defaults
-scope:
-  default: branch
-  base: main
-
-# Thresholds
-thresholds:
-  fail: 7.0
-  warn: 5.0
-
-# Top N issues to show
-topN: 3
-
-# Ignore patterns
-ignore:
-  - "**/legacy/**"
-  - "**/vendor/**"
-
-# Action mappings
-actions:
-  mapping:
-    - pattern: "**/auth/**"
-      commands:
-        - "npm test -- --grep auth"
-      reviewers:
-        - "@security-team"
-```
-
-**Generate config:**
-```bash
-dsense init --profile react
 ```
 
 ---
 
-## How It Works
+## License & Brand
 
-### 1. Signal Detection (220+ Signals)
+**License:** [Apache-2.0](LICENSE) — Free for commercial use, modification, and distribution.
 
-DiffeSense detects **risk signals** in your code changes across all major categories:
+**Brand:** See [BRAND_GUIDELINES.md](BRAND_GUIDELINES.md) for name and logo usage.
 
-**Security Signals** (SEC):
-- XSS vulnerabilities, SQL injection, command injection
-- Hardcoded secrets, weak crypto, SSRF
-- CORS misconfig, prototype pollution
-
-**Correctness Signals** (COR):
-- Unhandled promises, swallowed errors
-- Race conditions, infinite loops
-- TypeScript any usage, ReDoS regex
-
-**Behavioral Signals**:
-- Side effects (network, DOM, storage)
-- Async patterns, timers without cleanup
-- State management issues
-
-**Maintainability Signals** (MAINT):
-- Code complexity, deep nesting
-- TODO without tickets, commented code
-- Magic numbers, duplicate code
-
-**Framework-Specific** (React, Vue, Angular, Svelte, Node.js, SSR, React Native, Electron/Tauri)
-
-### 2. Risk Scoring
-
-Each file gets a risk score (0-10) based on:
-- Signal types and severity
-- Blast radius (how many files depend on it)
-- Confidence level
-
-### 3. Top N Selection
-
-Shows you the **most important issues** first:
-- Highest risk score
-- Highest blast radius
-- Critical signals prioritized
-
-### 4. Actionable Output
-
-Tells you **what to do next**:
-- Specific test commands
-- Reviewers to tag
-- Mitigation steps
-
----
-
-## Examples
-
-### Example 1: Auth Change
-
-```bash
-$ dsense --commit HEAD
-
-DiffeSense 1.1.0  •  risk gate for code changes
-Summary
-- Changed: 1 file  |  Analyzed: 1  |  Ignored: 0  |  Warnings: 0
-- Highest risk: 8.9/10  |  Blockers: 1  |  Exit code: 1
-
-Top 1 risky file
-Risk  Sev       Blast  File                 Why (top reasons)
-8.9   CRITICAL  12     src/auth/login.ts    auth-boundary; async patterns
-```
-
-### Example 2: Safe Refactor
-
-```bash
-$ dsense --commit HEAD
-
-DiffeSense 1.1.0  •  risk gate for code changes
-Summary
-- Changed: 3 files  |  Analyzed: 3  |  Ignored: 0  |  Warnings: 0
-- Highest risk: 2.1/10  |  Blockers: 0  |  Exit code: 0
-
-Top 3 risky files
-Risk  Sev  Blast  File                    Why (top reasons)
-2.1   LOW  2      src/utils/format.ts     minor refactor
-1.8   LOW  1      src/utils/validate.ts   minor refactor
-1.5   LOW  0      src/utils/parse.ts      minor refactor
-```
-
-### Example 3: Detailed Analysis
-
-```bash
-$ dsense --commit HEAD --details
-
-DiffeSense 1.1.0 — DETAILED ANALYSIS
-
-Details: src/api/users.ts
-- Risk: 6.5 (HIGH)  |  Blast radius: 8
-- Signals:
-  ✗ async-await pattern (line 45)
-  ⚠ error handling weak (line 67)
-  • network request added (line 89)
-- Risk reasons:
-  • Behavioral side-effects detected
-  • Error handling needs improvement
-
-   Risk breakdown:
-     Behavioral:      +4.5
-     Maintainability: +2.0   (cannot block alone)
-     Critical:        +0.0
-
-   Evidence (top 3):
-     L128  [behavioral/network-axios]
-           HTTP request introduced or modified
-     L207  [behavioral/async-await]
-           Async boundary added
-     L210  [behavioral/error-handling]
-           Error handling pattern detected
-
-   Do next:
-     Run:    npm test -- api/users
-     Check:  error handling + retries
-```
-
----
-
-## Documentation
-
-- **[Quick Start Guide](docs/QUICK_START.md)** - Get started in 5 minutes
-- **[CLI Reference](docs/CLI_REFERENCE.md)** - All commands and options
-- **[Output Formats](docs/OUTPUT_FORMATS.md)** - Console, Markdown, JSON
-- **[Public Contract](docs/PUBLIC_CONTRACT.md)** - Exit codes, determinism
-- **[Detectors](docs/DETECTORS.md)** - Signal detection reference
-- **[Profiles](docs/PROFILES.md)** - Profile configuration guide
-- **[Architecture](ARCHITECTURE.md)** - Project structure
-- **[Contributing](CONTRIBUTING.md)** - How to contribute
-
----
-
-## Free & Open Source
-
-**DiffeSense CLI is 100% free and open-source (MIT).**
-
-- ✅ No account required
-- ✅ No data collection
-- ✅ Works offline
-- ✅ Unlimited usage
-- ✅ CI-ready out of the box
-- ✅ No hidden paywalls
-
-**You own your data. Always.**
-
-The CLI and core engine will remain free forever. Optional managed services (GitHub App, Dashboard) may be available in the future for teams who want zero-setup automation.
-
----
-
-## FAQ
-
-**Q: Is this a linter?**
-A: No. Linters catch syntax issues. DiffeSense catches impact issues.
-
-**Q: Do I still need ESLint/Prettier?**
-A: Yes! Use both. Linters catch bugs, DiffeSense catches risk.
-
-**Q: Why only top 3 by default?**
-A: Because developers ignore tools that spam them. Top 3 = actually actionable.
-
-**Q: Can I use this for languages other than JS/TS?**
-A: Not yet. But the architecture is designed to support any language. PRs welcome!
-
-**Q: Does it send my code anywhere?**
-A: No. Everything runs locally. No data leaves your machine.
-
-**Q: How is this different from CodeClimate/SonarQube?**
-A: Those analyze entire codebases. DiffeSense analyzes **only your changes** and tells you **what to do next**.
+**Security:** See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ---
 
 ## Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-**Ways to contribute:**
-- 🐛 Report bugs
-- 💡 Suggest features
-- 📝 Improve documentation
-- 🔧 Submit PRs
-- ⭐ Star the repo
-
----
-
-## License
-
-MIT © [Branislav Grozdanovic](https://github.com/djkepa)
-
-**DiffeSense CLI and core engine are open-source under the MIT license.**
-
-Commercial use, modification, and distribution are permitted.
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## Support
 
-- 📖 [Documentation](docs/)
-- 🐛 [Report Issues](https://github.com/djkepa/diffesense/issues)
-- 💬 [Discussions](https://github.com/djkepa/diffesense/discussions)
-- 📧 [Email](mailto:contact@diffesense.dev)
-
----
-
-**DiffeSense** — Know your risk before you merge.
-
-Built with ❤️ for developers who care about code quality.
+- [Documentation](docs/)
+- [Report Issues](https://github.com/djkepa/diffesense/issues)
+- [Discussions](https://github.com/djkepa/diffesense/discussions)
+- Email: banegrozdanovic@gmail.com
 
 ---
 
 <p align="center">
-  <sub>If DiffeSense helps you ship better code, consider giving it a ⭐ on GitHub!</sub>
+  <sub>If DiffeSense helps you ship better code, consider giving it a ⭐</sub>
 </p>

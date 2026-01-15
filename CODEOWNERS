@@ -1,0 +1,36 @@
+# DiffeSense Code Owners
+# These owners will be requested for review when changes are made to their areas.
+
+# Default owner for everything
+* @djkepa
+
+# Core engine - requires maintainer review
+/src/core/ @djkepa
+/src/signals/ @djkepa
+/src/policy/ @djkepa
+
+# Schema and config - breaking changes
+/src/config/schema.ts @djkepa
+
+# CLI interface
+/src/cli/ @djkepa
+
+# Output formatters
+/src/output/ @djkepa
+
+# Tests
+/tests/ @djkepa
+
+# Documentation
+/docs/ @djkepa
+README.md @djkepa
+CHANGELOG.md @djkepa
+
+# Security-sensitive
+SECURITY.md @djkepa
+LICENSE @djkepa
+TRADEMARK.md @djkepa
+
+# CI/CD
+/.github/ @djkepa
+/.gitlab-ci*.yml @djkepa
