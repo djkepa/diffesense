@@ -5,7 +5,33 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0]
+## [1.5.1]  
+
+### Changed
+
+#### License
+- **Switched to Apache-2.0** (from MIT) - Better for enterprise adoption with explicit patent grant
+
+#### Documentation
+- **Streamlined README** - 731 → 175 lines (75% reduction)
+- Added **BRAND_GUIDELINES.md** - Clear name/logo usage policy without legal claims
+- Added **SECURITY.md** - Responsible disclosure process via GitHub Security Advisories
+- Added **RELEASE.md** - Release checklist and versioning policy
+- Added **CODEOWNERS** - Review requirements for core areas
+- Added **NOTICE** - Apache-2.0 standard copyright notice
+- Removed placeholder emails, using real contact: banegrozdanovic@gmail.com
+
+### Why This Update?
+
+This patch ensures:
+- Legal clarity for commercial users (Apache-2.0 is industry standard)
+- Professional project structure (SECURITY, CODEOWNERS, etc.)
+- Accurate contact information (no fake domains)
+- Cleaner, more focused documentation
+
+---
+
+## [1.5.0]  
 
 ### 📦 Policy Packs - Enterprise-Ready Configuration
 
