@@ -21,8 +21,13 @@ npx diffesense
 ### 1. Analyze Your Changes
 
 ```bash
-# Default: analyze current branch vs main
+# Auto-detect: analyzes staged → working → branch automatically
 dsense
+
+# Or be explicit:
+dsense --scope working   # uncommitted changes
+dsense --scope staged    # staged changes (pre-commit)
+dsense --scope branch    # committed changes (CI/PR)
 ```
 
 **Output:**

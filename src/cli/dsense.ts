@@ -4,7 +4,13 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isGitRepo, DiffScope } from '../git/diff';
+import {
+  isGitRepo,
+  DiffScope,
+  autoDetectScope,
+  hasStagedChanges,
+  hasWorkingChanges,
+} from '../git/diff';
 import { analyze } from '../core/analyze';
 import { formatConsoleOutput } from '../output/formatters/dsConsole';
 import { formatMarkdownOutput } from '../output/formatters/dsMarkdown';
@@ -18,7 +24,10 @@ program
   .name('dsense')
   .description('DiffeSense - Framework-agnostic JavaScript/TypeScript change-risk engine')
   .version(VERSION)
-  .option('-s, --scope <mode>', 'Analysis scope: branch|staged|worktree|commit', 'branch')
+  .option(
+    '-s, --scope <mode>',
+    'Analysis scope: branch|staged|working|commit|range (default: auto-detect)',
+  )
   .option('-b, --base <branch>', 'Base branch for comparison')
   .option('-r, --range <range>', 'Git commit range (e.g. HEAD~5..HEAD or abc123..def456)')
   .option('--commit <sha>', 'Analyze specific commit (e.g. HEAD or abc123)')
@@ -768,16 +777,30 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
   const determinismCheck = options.determinismCheck || false;
   const explainIgnoreFlag = options.explainIgnore || false;
 
+  let resolvedScope: DiffScope;
+  let scopeAutoDetected = false;
+
+  if (options.commit) {
+    resolvedScope = 'commit';
+  } else if (options.range) {
+    resolvedScope = 'range';
+  } else if (options.scope) {
+    resolvedScope = (options.scope === 'worktree' ? 'working' : options.scope) as DiffScope;
+  } else {
+    const detected = autoDetectScope(cwd);
+    resolvedScope = detected.scope;
+    scopeAutoDetected = true;
+    if (!quiet) {
+      console.log(chalk.dim(`Auto-detected scope: ${resolvedScope} (${detected.reason})`));
+    }
+  }
+
   if (explainIgnoreFlag) {
     const { getChangedFiles } = require('../git/diff');
     const { explainIgnoreMultiple, formatIgnoreExplanations } = require('../core/ignore');
 
-    let scope: DiffScope = (options.scope || 'branch') as DiffScope;
-    if (options.commit) scope = 'commit';
-    else if (options.range) scope = 'range';
-
     const changedFiles = getChangedFiles({
-      scope,
+      scope: resolvedScope,
       base: options.base || 'main',
       commit: options.commit,
       range: options.range,
@@ -808,7 +831,7 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
 
   const result = await analyze({
     cwd,
-    scope: options.scope as DiffScope,
+    scope: resolvedScope,
     base: options.base,
     commit: options.commit,
     range: options.range,
@@ -840,8 +863,27 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
   }
 
   if (result.summary.analyzedCount === 0) {
-    const msg =
-      result.summary.changedCount === 0 ? 'No source files changed' : 'No analyzable files found';
+    let msg: string;
+    if (result.summary.changedCount === 0) {
+      if (resolvedScope === 'branch' && !scopeAutoDetected) {
+        const hasLocal = hasWorkingChanges(cwd) || hasStagedChanges(cwd);
+        if (hasLocal) {
+          msg = `No committed changes found.
+
+${chalk.yellow('Tip:')} You have uncommitted changes in your working tree.
+Try:
+  ${chalk.cyan('diffesense')}                  ${chalk.dim('# auto-detect local changes')}
+  ${chalk.cyan('diffesense --scope working')}  ${chalk.dim('# analyze uncommitted changes')}
+  ${chalk.cyan('diffesense --scope staged')}   ${chalk.dim('# analyze staged changes')}`;
+        } else {
+          msg = 'No source files changed';
+        }
+      } else {
+        msg = 'No source files changed';
+      }
+    } else {
+      msg = 'No analyzable files found';
+    }
     return {
       output: quiet ? '' : msg,
       exitCode: 0,

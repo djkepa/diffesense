@@ -1,0 +1,20 @@
+# GitLab CI Example for DiffeSense
+# Copy this to your .gitlab-ci.yml or include it
+
+diffesense:
+  stage: test
+  image: node:18
+  before_script:
+    - npm install -g diffesense@latest
+  script:
+    - diffesense --format markdown > diffesense-report.md
+  artifacts:
+    reports:
+      junit: diffesense-report.md
+    paths:
+      - diffesense-report.md
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  allow_failure: false

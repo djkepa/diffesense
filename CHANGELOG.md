@@ -5,6 +5,33 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-01-15
+
+### Added
+
+#### Smart Scope Auto-Detection
+- **Auto-detect mode** - Running `dsense` without `--scope` now intelligently detects:
+  - If staged changes exist → uses `staged` scope
+  - Else if working tree has changes → uses `working` scope  
+  - Otherwise → uses `branch` scope (CI/PR mode)
+- **`--scope working`** - New scope for analyzing uncommitted changes
+- **Friendly fallback messages** - When `--scope branch` finds no commits but working tree is dirty, shows helpful tip
+
+#### Testing
+- **11 new E2E tests** - Comprehensive coverage for working/staged scope detection
+- **Helper function tests** - `hasStagedChanges()`, `hasWorkingChanges()`, `autoDetectScope()`
+
+### Changed
+- **CLI help updated** - `--scope` now shows `(default: auto-detect)`
+- **Documentation** - README, QUICK_START, CLI_REFERENCE updated with new scope options
+
+### Developer Experience
+- Local development is now seamless: just run `dsense` and it works
+- Pre-commit hooks: `dsense --scope staged --quiet`
+- CI/PR: `dsense --scope branch --base main`
+
+---
+
 ## [1.1.1] - 2026-01-15
 
 ### Changed

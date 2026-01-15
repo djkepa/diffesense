@@ -15,7 +15,7 @@ export interface ChangedFileDetail {
   oldPath?: string;
 }
 
-export type DiffScope = 'branch' | 'staged' | 'worktree' | 'commit' | 'range';
+export type DiffScope = 'branch' | 'staged' | 'working' | 'worktree' | 'commit' | 'range';
 
 export interface DiffParseOptions {
   scope: DiffScope;
@@ -39,6 +39,7 @@ export function parseGitDiff(options: DiffParseOptions): ChangedFileDetail[] {
     case 'staged':
       args = ['diff', '--cached', '-U' + contextLines, '--no-color'];
       break;
+    case 'working':
     case 'worktree':
       args = ['diff', '-U' + contextLines, '--no-color'];
       break;

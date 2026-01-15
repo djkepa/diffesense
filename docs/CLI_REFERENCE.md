@@ -345,22 +345,31 @@ Control what code changes to analyze.
 Analysis scope mode.
 
 **Values:**
-- `branch` (default) - Compare current branch vs base branch
+- `working` - Analyze uncommitted changes (working tree)
 - `staged` - Analyze staged files (git add)
-- `worktree` - Analyze uncommitted changes
+- `branch` - Compare current branch vs base branch
 - `commit` - Analyze specific commit (requires `--commit`)
 - `range` - Analyze commit range (requires `--range`)
 
+**Default behavior (auto-detection):**
+When no `--scope` is provided, DiffeSense automatically detects:
+1. If there are staged changes → uses `staged`
+2. Else if there are uncommitted changes → uses `working`
+3. Otherwise → uses `branch`
+
 **Examples:**
 ```bash
-# Branch mode (default)
-dsense --scope branch
+# Auto-detect (recommended)
+dsense
+
+# Uncommitted changes (local development)
+dsense --scope working
 
 # Staged files (pre-commit hook)
 dsense --scope staged
 
-# Uncommitted changes
-dsense --scope worktree
+# Branch mode (CI/PR)
+dsense --scope branch
 
 # Specific commit
 dsense --scope commit --commit HEAD

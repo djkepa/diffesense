@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
 import { analyze } from '../src/core/analyze';
+import { hasStagedChanges, hasWorkingChanges, autoDetectScope } from '../src/git/diff';
 
 describe('E2E Integration Tests', () => {
   let tempDir: string;
@@ -285,6 +286,139 @@ describe('E2E Integration Tests', () => {
       expect(result.error).toBeDefined();
 
       fs.rmSync(nonGitDir, { recursive: true, force: true });
+    });
+  });
+
+  describe('Working/Staged Scope Detection', () => {
+    it('should detect uncommitted changes with working scope', async () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'index.ts'),
+        `export function hello() { return 'uncommitted modification'; }\n`,
+      );
+
+      const result = await analyze({
+        cwd: tempDir,
+        scope: 'working',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.summary.analyzedCount).toBeGreaterThan(0);
+      const filePaths = result.files.map((f) => f.path);
+      expect(filePaths).toContain('index.ts');
+
+      execSync('git checkout -- index.ts', { cwd: tempDir, stdio: 'pipe' });
+    });
+
+    it('should detect staged changes with staged scope', async () => {
+      fs.writeFileSync(path.join(tempDir, 'staged-file.ts'), `export const staged = true;\n`);
+      execSync('git add staged-file.ts', { cwd: tempDir, stdio: 'pipe' });
+
+      const result = await analyze({
+        cwd: tempDir,
+        scope: 'staged',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.summary.analyzedCount).toBeGreaterThan(0);
+      const filePaths = result.files.map((f) => f.path);
+      expect(filePaths).toContain('staged-file.ts');
+
+      execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
+      fs.unlinkSync(path.join(tempDir, 'staged-file.ts'));
+    });
+
+    it('should NOT see uncommitted changes with staged scope', async () => {
+      fs.writeFileSync(path.join(tempDir, 'only-working.ts'), `export const onlyWorking = true;\n`);
+
+      const result = await analyze({
+        cwd: tempDir,
+        scope: 'staged',
+      });
+
+      const filePaths = result.files.map((f) => f.path);
+      expect(filePaths).not.toContain('only-working.ts');
+
+      fs.unlinkSync(path.join(tempDir, 'only-working.ts'));
+    });
+
+    it('should NOT see staged changes with working scope', async () => {
+      fs.writeFileSync(path.join(tempDir, 'only-staged.ts'), `export const onlyStaged = true;\n`);
+      execSync('git add only-staged.ts', { cwd: tempDir, stdio: 'pipe' });
+
+      const result = await analyze({
+        cwd: tempDir,
+        scope: 'working',
+      });
+
+      const filePaths = result.files.map((f) => f.path);
+      expect(filePaths).not.toContain('only-staged.ts');
+
+      execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
+      fs.unlinkSync(path.join(tempDir, 'only-staged.ts'));
+    });
+  });
+
+  describe('Auto Scope Detection Helpers', () => {
+    it('hasStagedChanges should detect staged files', () => {
+      fs.writeFileSync(path.join(tempDir, 'for-staging.ts'), `export const x = 1;\n`);
+      execSync('git add for-staging.ts', { cwd: tempDir, stdio: 'pipe' });
+
+      expect(hasStagedChanges(tempDir)).toBe(true);
+
+      execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
+      fs.unlinkSync(path.join(tempDir, 'for-staging.ts'));
+    });
+
+    it('hasStagedChanges should return false when no staged changes', () => {
+      expect(hasStagedChanges(tempDir)).toBe(false);
+    });
+
+    it('hasWorkingChanges should detect uncommitted modifications', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'index.ts'),
+        `export function hello() { return 'modified'; }\n`,
+      );
+
+      expect(hasWorkingChanges(tempDir)).toBe(true);
+
+      execSync('git checkout -- index.ts', { cwd: tempDir, stdio: 'pipe' });
+    });
+
+    it('hasWorkingChanges should return false when working tree is clean', () => {
+      expect(hasWorkingChanges(tempDir)).toBe(false);
+    });
+
+    it('autoDetectScope should prioritize staged over working', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'index.ts'),
+        `export function hello() { return 'modified'; }\n`,
+      );
+      fs.writeFileSync(path.join(tempDir, 'new-file.ts'), `export const y = 2;\n`);
+      execSync('git add new-file.ts', { cwd: tempDir, stdio: 'pipe' });
+
+      const detected = autoDetectScope(tempDir);
+      expect(detected.scope).toBe('staged');
+
+      execSync('git reset HEAD', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git checkout -- index.ts', { cwd: tempDir, stdio: 'pipe' });
+      fs.unlinkSync(path.join(tempDir, 'new-file.ts'));
+    });
+
+    it('autoDetectScope should use working when no staged changes', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'index.ts'),
+        `export function hello() { return 'modified'; }\n`,
+      );
+
+      const detected = autoDetectScope(tempDir);
+      expect(detected.scope).toBe('working');
+
+      execSync('git checkout -- index.ts', { cwd: tempDir, stdio: 'pipe' });
+    });
+
+    it('autoDetectScope should use branch when no local changes', () => {
+      const detected = autoDetectScope(tempDir);
+      expect(detected.scope).toBe('branch');
     });
   });
 });

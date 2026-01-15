@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import * as path from 'path';
 import { shouldIgnore, buildIgnoreList, IgnoreConfig } from '../core/ignore';
 
-export type DiffScope = 'branch' | 'staged' | 'worktree' | 'commit' | 'range';
+export type DiffScope = 'branch' | 'staged' | 'working' | 'worktree' | 'commit' | 'range';
 
 export interface DiffOptions {
   scope: DiffScope;
@@ -47,6 +47,7 @@ export function getChangedFiles(options: DiffOptions): ChangedFile[] {
     case 'staged':
       args = ['diff', '--cached', '--name-status'];
       break;
+    case 'working':
     case 'worktree':
       args = ['diff', '--name-status'];
       break;
@@ -266,4 +267,46 @@ export function isGitRepo(cwd: string = process.cwd()): boolean {
     stdio: 'pipe',
   });
   return result.status === 0;
+}
+
+export function hasStagedChanges(cwd: string = process.cwd()): boolean {
+  const result = spawnSync('git', ['diff', '--cached', '--name-only'], {
+    encoding: 'utf-8',
+    cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return result.status === 0 && !!result.stdout?.trim();
+}
+
+export function hasWorkingChanges(cwd: string = process.cwd()): boolean {
+  const result = spawnSync('git', ['diff', '--name-only'], {
+    encoding: 'utf-8',
+    cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return result.status === 0 && !!result.stdout?.trim();
+}
+
+export function hasUntrackedFiles(cwd: string = process.cwd()): boolean {
+  const result = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], {
+    encoding: 'utf-8',
+    cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  return result.status === 0 && !!result.stdout?.trim();
+}
+
+export type AutoDetectedScope = {
+  scope: DiffScope;
+  reason: string;
+};
+
+export function autoDetectScope(cwd: string = process.cwd()): AutoDetectedScope {
+  if (hasStagedChanges(cwd)) {
+    return { scope: 'staged', reason: 'staged changes detected' };
+  }
+  if (hasWorkingChanges(cwd)) {
+    return { scope: 'working', reason: 'uncommitted changes detected' };
+  }
+  return { scope: 'branch', reason: 'no local changes, using branch diff' };
 }
