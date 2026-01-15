@@ -573,30 +573,28 @@ dsense --format json
 DIFFESENSE
 ============================================================
 
-Scope:     branch vs main
-Branch:    feature/user-auth
-Changed:   8 files
-Analyzed:  8 files
+DiffeSense 1.1.0  •  risk gate for code changes
+Repo: my-app  |  CWD: /home/user/my-app
+Scope: branch  |  Base: main  |  Range: main...HEAD
+Profile: minimal  |  Detector: auto
+Config: defaults  |  Schema: 1.0.0
 
-Overall Risk: 7.2/10 (HIGH)
-Issues: 3 shown of 5
+Summary
+- Changed: 8 files  |  Analyzed: 8  |  Ignored: 0  |  Warnings: 0
+- Highest risk: 8.9/10  |  Blockers: 1  |  Exit code: 1
 
-TOP RISKS
-------------------------------------------------------------
-
-1) src/auth/middleware.ts — Risk 8.9 [BLOCKER]
-   Reasons: Critical: auth-boundary (+3.0), Behavioral: async (+2.0)
-   Impact: 12 dependent files
-   Do next:
-     - Run: npm test -- auth
-     - Review: @security-team
+Top 3 risky files
+Risk  Sev       Blast  File                      Why (top reasons)
+8.9   CRITICAL  12     src/auth/middleware.ts    auth-boundary; async patterns
+7.2   HIGH      6      src/api/client.ts         error handling weak
+6.8   HIGH      3      src/components/Cart.tsx   heavy component
 ```
 
 **Markdown Output:**
 ```markdown
-# 🔴 DiffeSense: FAIL
+# 🔍 DiffeSense 1.1.0 — Risk Analysis
 
-**PR Risk:** 7.2/10 (HIGH) • Confidence: 85%
+**Status:** ❌ FAIL (exit code: 1)
 
 ## 📊 Top 3 Files
 

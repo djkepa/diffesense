@@ -45,22 +45,21 @@ dsense
 ## What You Get
 
 ```
-DIFFESENSE
-============================================================
-Scope:     branch vs main
-Changed:   8 files | Analyzed: 8
+DiffeSense 1.1.0  •  risk gate for code changes
+Repo: my-app  |  CWD: /home/user/my-app
+Scope: branch  |  Base: main  |  Range: main...HEAD
+Profile: minimal  |  Detector: auto
+Config: defaults  |  Schema: 1.0.0
 
-Decision:  FAIL ✖
-Highest:   8.9/10  HIGH  | Confidence: HIGH (0.89)
+Summary
+- Changed: 8 files  |  Analyzed: 8  |  Ignored: 0  |  Warnings: 0
+- Highest risk: 8.9/10  |  Blockers: 1  |  Exit code: 1
 
-Top risk (1/3)   [--details for explanation]
-------------------------------------------------------------
-src/auth/middleware.ts
-Risk: 8.9  BLOCKER | Δ lines: 23 | Blast radius: 12
-Why: Critical signals present (auth, payments, security)
-------------------------------------------------------------
-
-Summary: blockers=1 | warnings=2 | highest=8.9 | exit=1
+Top 3 risky files
+Risk  Sev       Blast  File                      Why (top reasons)
+8.9   CRITICAL  12     src/auth/middleware.ts    auth-boundary; async patterns
+7.2   HIGH      6      src/api/client.ts         error handling weak
+6.8   HIGH      3      src/components/Cart.tsx   heavy component
 ```
 
 **Key Features:**
@@ -377,16 +376,14 @@ Tells you **what to do next**:
 ```bash
 $ dsense --commit HEAD
 
-Decision:  FAIL ✖
-Highest:   8.9/10  HIGH  | Confidence: HIGH (0.89)
+DiffeSense 1.1.0  •  risk gate for code changes
+Summary
+- Changed: 1 file  |  Analyzed: 1  |  Ignored: 0  |  Warnings: 0
+- Highest risk: 8.9/10  |  Blockers: 1  |  Exit code: 1
 
-src/auth/login.ts
-Risk: 8.9  BLOCKER | Δ lines: 23 | Blast radius: 12
-Why: Critical signals present (auth, payments, security)
-
-Do next:
-  Run:    npm test -- --grep auth
-  Review: @security-team
+Top 1 risky file
+Risk  Sev       Blast  File                 Why (top reasons)
+8.9   CRITICAL  12     src/auth/login.ts    auth-boundary; async patterns
 ```
 
 ### Example 2: Safe Refactor
@@ -394,10 +391,16 @@ Do next:
 ```bash
 $ dsense --commit HEAD
 
-Decision:  PASS ✔
-Highest:   2.1/10  LOW  | Confidence: MEDIUM (0.65)
+DiffeSense 1.1.0  •  risk gate for code changes
+Summary
+- Changed: 3 files  |  Analyzed: 3  |  Ignored: 0  |  Warnings: 0
+- Highest risk: 2.1/10  |  Blockers: 0  |  Exit code: 0
 
-All changed files are within acceptable risk levels.
+Top 3 risky files
+Risk  Sev  Blast  File                    Why (top reasons)
+2.1   LOW  2      src/utils/format.ts     minor refactor
+1.8   LOW  1      src/utils/validate.ts   minor refactor
+1.5   LOW  0      src/utils/parse.ts      minor refactor
 ```
 
 ### Example 3: Detailed Analysis
@@ -405,14 +408,17 @@ All changed files are within acceptable risk levels.
 ```bash
 $ dsense --commit HEAD --details
 
-Decision:  WARN !
-Highest:   6.5/10  MEDIUM  | Confidence: MEDIUM (0.72)
+DiffeSense 1.1.0 — DETAILED ANALYSIS
 
-1) src/api/users.ts
-   Risk: 6.5  WARNING | Δ lines: 45 | Blast radius: 8
-
-   Why this file:
-   Behavioral side-effects detected in changed lines
+Details: src/api/users.ts
+- Risk: 6.5 (HIGH)  |  Blast radius: 8
+- Signals:
+  ✗ async-await pattern (line 45)
+  ⚠ error handling weak (line 67)
+  • network request added (line 89)
+- Risk reasons:
+  • Behavioral side-effects detected
+  • Error handling needs improvement
 
    Risk breakdown:
      Behavioral:      +4.5
