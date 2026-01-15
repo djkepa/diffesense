@@ -213,6 +213,61 @@ npx diffesense --scope staged --quiet
 
 ---
 
+## Programmatic API (v1.1.0+)
+
+Use DiffeSense as a library in your own tools:
+
+```typescript
+import { analyze } from 'diffesense';
+
+const result = await analyze({
+  cwd: '/path/to/repo',
+  scope: 'branch',
+  base: 'main',
+  profile: 'react',
+});
+
+// Structured result - no console.log, no process.exit
+console.log(`Exit code: ${result.exitCode}`);
+console.log(`Blockers: ${result.summary.blockerCount}`);
+console.log(`Highest risk: ${result.summary.highestRisk}`);
+
+// Iterate over risky files
+for (const file of result.files) {
+  console.log(`${file.path}: ${file.severity} (${file.riskScore})`);
+}
+
+// Check ignored files
+for (const ignored of result.ignoredFiles) {
+  console.log(`Skipped: ${ignored.path} - ${ignored.reason}`);
+}
+```
+
+### API Contract
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Whether analysis completed |
+| `exitCode` | 0 \| 1 \| 2 | PASS / FAIL / ERROR |
+| `meta` | object | Analysis context (scope, base, profile, etc.) |
+| `summary` | object | Statistics (changedCount, blockerCount, etc.) |
+| `files` | array | Analyzed files with risk scores and severity |
+| `ignoredFiles` | array | Skipped files with reasons |
+| `warnings` | array | Config/analysis warnings |
+
+### Severity Levels
+
+| Severity | Risk Score | Description |
+|----------|------------|-------------|
+| `CRITICAL` | ≥ 8.0 | Immediate attention required |
+| `HIGH` | 6.0-7.9 | Should be reviewed carefully |
+| `MED` | 3.0-5.9 | Moderate risk |
+| `LOW` | < 3.0 | Low risk |
+
+📖 **[Full API Documentation →](docs/api-schema.json)**
+
+---
+
 ## Exit Codes
 
 | Code | Status | Meaning | CI Behavior |

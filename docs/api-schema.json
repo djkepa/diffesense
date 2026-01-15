@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://diffesense.dev/schemas/analysis-result-v1.json",
+  "title": "DiffeSense Analysis Result",
+  "description": "Structured result from the analyze() API. This schema is versioned and stable.",
+  "version": "1.0.0",
+  "type": "object",
+  "required": [
+    "success",
+    "exitCode",
+    "meta",
+    "summary",
+    "files",
+    "ignoredFiles",
+    "warnings",
+    "config"
+  ],
+  "properties": {
+    "success": {
+      "type": "boolean",
+      "description": "Whether analysis completed successfully"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if success is false"
+    },
+    "exitCode": {
+      "type": "integer",
+      "enum": [0, 1, 2],
+      "description": "Exit code: 0=pass, 1=fail (blockers), 2=error"
+    },
+    "meta": {
+      "type": "object",
+      "required": [
+        "cwd",
+        "scope",
+        "base",
+        "profile",
+        "detector",
+        "configSource",
+        "isDiffAnalysis",
+        "timestamp"
+      ],
+      "properties": {
+        "cwd": { "type": "string", "description": "Working directory" },
+        "scope": {
+          "type": "string",
+          "enum": ["branch", "staged", "worktree", "commit", "range"],
+          "description": "Analysis scope"
+        },
+        "base": { "type": "string", "description": "Base branch for comparison" },
+        "branch": { "type": ["string", "null"], "description": "Current branch name" },
+        "profile": { "type": "string", "description": "Profile used for analysis" },
+        "detector": {
+          "type": "string",
+          "enum": ["auto", "generic", "react", "vue", "angular", "node"],
+          "description": "Detector profile"
+        },
+        "configSource": { "type": "string", "description": "Where config was loaded from" },
+        "isDiffAnalysis": {
+          "type": "boolean",
+          "description": "Whether analyzing diff vs full files"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Analysis timestamp (ISO 8601)"
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "changedCount",
+        "analyzedCount",
+        "ignoredCount",
+        "highestRisk",
+        "blockerCount",
+        "warningCount",
+        "infoCount"
+      ],
+      "properties": {
+        "changedCount": { "type": "integer", "minimum": 0, "description": "Total changed files" },
+        "analyzedCount": { "type": "integer", "minimum": 0, "description": "Files analyzed" },
+        "ignoredCount": { "type": "integer", "minimum": 0, "description": "Files ignored" },
+        "highestRisk": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Highest risk score"
+        },
+        "blockerCount": { "type": "integer", "minimum": 0, "description": "Number of blockers" },
+        "warningCount": { "type": "integer", "minimum": 0, "description": "Number of warnings" },
+        "infoCount": { "type": "integer", "minimum": 0, "description": "Number of info items" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Analyzed files with risk scores",
+      "items": {
+        "type": "object",
+        "required": ["path", "riskScore", "blastRadius", "evidence", "riskReasons", "signalTypes"],
+        "properties": {
+          "path": { "type": "string", "description": "File path relative to cwd" },
+          "riskScore": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Risk score (0-10)"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["LOW", "MED", "HIGH", "CRITICAL"],
+            "description": "Risk severity level (derived from riskScore)"
+          },
+          "blastRadius": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of dependent files"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["message", "severity"],
+              "properties": {
+                "line": { "type": "integer", "description": "Line number (optional)" },
+                "message": { "type": "string", "description": "Evidence message" },
+                "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+                "tag": { "type": "string", "description": "Evidence tag/category" }
+              }
+            }
+          },
+          "riskReasons": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Human-readable risk explanations"
+          },
+          "signalTypes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Signal type IDs detected"
+          }
+        }
+      }
+    },
+    "ignoredFiles": {
+      "type": "array",
+      "description": "Files that were ignored with reasons",
+      "items": {
+        "type": "object",
+        "required": ["path", "reason"],
+        "properties": {
+          "path": { "type": "string", "description": "Ignored file path" },
+          "reason": { "type": "string", "description": "Why file was ignored" }
+        }
+      }
+    },
+    "evaluation": {
+      "type": ["object", "null"],
+      "description": "Policy evaluation result (null if no files analyzed)",
+      "properties": {
+        "blockers": { "type": "array", "description": "Blocking issues" },
+        "warnings": { "type": "array", "description": "Warning issues" },
+        "infos": { "type": "array", "description": "Info items" },
+        "exitCode": { "type": "integer", "enum": [0, 1] }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "description": "Config and analysis warnings",
+      "items": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "description": "Warning code" },
+          "message": { "type": "string", "description": "Warning message" },
+          "path": { "type": "string", "description": "Related file path (optional)" }
+        }
+      }
+    },
+    "config": {
+      "type": "object",
+      "description": "Resolved config used for analysis"
+    }
+  }
+}

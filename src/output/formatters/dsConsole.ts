@@ -1,7 +1,8 @@
 import chalk from 'chalk';
-import { EvaluationResult, RuleResult } from '../../policy/engine';
-import { selectTopN, TopNResult, formatHiddenMessage } from '../../core/topN';
-import { formatActionsMarkdown, ConcreteAction } from '../../core/actions';
+import * as path from 'path';
+import { AnalysisResult } from '../../core/analyze';
+import { getRiskSeverity, getSeverityColor, sortFilesBySeverity } from '../../core/severity';
+import { VERSION } from '../../version';
 
 export interface OutputContext {
   scope: string;
@@ -10,303 +11,210 @@ export interface OutputContext {
   profile: string;
   changedCount: number;
   analyzedCount: number;
+  isDiffAnalysis?: boolean;
 }
 
 export interface ConsoleOutputConfig {
   showAll?: boolean;
   topN?: number;
-  showConfidence?: boolean;
-  colors?: boolean;
   details?: boolean;
+  quiet?: boolean;
 }
 
-const SEPARATOR = '-'.repeat(60);
-const DOUBLE_SEP = '='.repeat(60);
-
+/**
+ * Format analysis result for console output
+ */
 export function formatConsoleOutput(
-  result: EvaluationResult,
-  context: OutputContext,
+  result: AnalysisResult,
   config: ConsoleOutputConfig = {},
 ): string {
+  if (config.quiet) {
+    return formatQuietOutput(result);
+  }
+
+  if (config.details) {
+    return formatDetailedOutput(result, config);
+  }
+
+  return formatDefaultOutput(result, config);
+}
+
+function formatQuietOutput(result: AnalysisResult): string {
+  const parts = [
+    `DiffeSense ${VERSION}`,
+    `analyzed=${result.summary.analyzedCount}`,
+    `ignored=${result.summary.ignoredCount}`,
+    `warnings=${result.summary.warningCount}`,
+    `highestRisk=${result.summary.highestRisk.toFixed(1)}`,
+    `blockers=${result.summary.blockerCount}`,
+    `exitCode=${result.exitCode}`,
+  ];
+  return parts.join('  |  ');
+}
+
+function formatDefaultOutput(result: AnalysisResult, config: ConsoleOutputConfig): string {
   const lines: string[] = [];
-  const useColors = config.colors !== false;
-
-  const topN = selectTopN(result.blockers, result.warnings, result.infos, {
-    showAll: config.showAll || false,
-    limit: config.topN || 3,
-  });
-
-  const isDetails = config.details || false;
 
   lines.push('');
+  lines.push(chalk.bold.cyan(`DiffeSense ${VERSION}`) + chalk.gray('  •  risk gate for code changes'));
+  
+  const repoName = path.basename(result.meta.cwd);
+  lines.push(chalk.gray(`Repo: ${repoName}  |  CWD: ${result.meta.cwd}`));
+  
+  const range = result.meta.isDiffAnalysis 
+    ? `${result.meta.base}...HEAD`
+    : 'full analysis';
+  lines.push(chalk.gray(`Scope: ${result.meta.scope}  |  Base: ${result.meta.base}  |  Range: ${range}`));
+  lines.push(chalk.gray(`Profile: ${result.meta.profile}  |  Detector: ${result.meta.detector}`));
+  lines.push(chalk.gray(`Config: ${result.meta.configSource}  |  Schema: 1.0.0`));
+  lines.push('');
+
+  lines.push(chalk.bold('Summary'));
   lines.push(
-    useColors
-      ? chalk.bold(isDetails ? 'DIFFESENSE — DETAILS' : 'DIFFESENSE')
-      : isDetails
-      ? 'DIFFESENSE — DETAILS'
-      : 'DIFFESENSE',
+    `- Changed: ${result.summary.changedCount} files  |  ` +
+    `Analyzed: ${result.summary.analyzedCount}  |  ` +
+    `Ignored: ${result.summary.ignoredCount}  |  ` +
+    `Warnings: ${result.summary.warningCount}`
   );
-  lines.push(DOUBLE_SEP);
-
-  const scopeDisplay =
-    context.scope === 'commit'
-      ? 'commit'
-      : context.scope === 'range'
-      ? 'range'
-      : `${context.scope} vs ${context.base}`;
-  lines.push(`Scope:     ${scopeDisplay}`);
-  lines.push(`Profile:   ${context.profile}`);
-  lines.push(`Changed:   ${context.changedCount} files | Analyzed: ${context.analyzedCount}`);
+  lines.push(
+    `- Highest risk: ${chalk.bold(result.summary.highestRisk.toFixed(1))}/10  |  ` +
+    `Blockers: ${chalk.bold.red(result.summary.blockerCount)}  |  ` +
+    `Exit code: ${result.exitCode === 0 ? chalk.green(result.exitCode) : chalk.red(result.exitCode)}`
+  );
   lines.push('');
 
-  const highestRisk = getHighestRisk(topN);
-  const overallSeverity = getOverallSeverity(topN);
-  const confidence = calculateOverallConfidence(topN);
-  const confidenceLabel = formatConfidenceLabel(confidence);
+  if (result.files.length > 0) {
+    const topN = config.topN || 3;
+    const sorted = sortFilesBySeverity(result.files);
+    const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
 
-  const decision =
-    result.exitCode === 0
-      ? useColors
-        ? chalk.green('PASS ✔')
-        : 'PASS ✔'
-      : result.exitCode === 1
-      ? useColors
-        ? chalk.red('FAIL ✖')
-        : 'FAIL ✖'
-      : useColors
-      ? chalk.yellow('WARN ✖')
-      : 'WARN ✖';
-
-  if (topN.totalCount === 0) {
-    lines.push(`Decision:  ${decision}`);
-    lines.push(
-      `Highest:   0.0/10  LOW   | Confidence: ${confidenceLabel} (${confidence.toFixed(2)})`,
-    );
-    lines.push('');
-    lines.push('All changed files are within acceptable risk levels.');
-    lines.push('');
-    lines.push(`Summary: blockers=0 | warnings=0 | highest=0.0 | exit=${result.exitCode}`);
-  } else {
-    const severityText =
-      overallSeverity === 'blocker' ? 'HIGH' : overallSeverity === 'warning' ? 'MEDIUM' : 'LOW';
-
-    lines.push(`Decision:  ${decision}`);
-    lines.push(
-      `Highest:   ${highestRisk.toFixed(1)}/10  ${severityText.padEnd(
-        5,
-      )} | Confidence: ${confidenceLabel} (${confidence.toFixed(2)})`,
-    );
+    lines.push(chalk.bold(`Top ${topFiles.length} risky files`));
+    lines.push(formatFileTable(topFiles));
     lines.push('');
 
-    if (!isDetails) {
-      const topLabel = topN.isLimited
-        ? `Top risk (${topN.shownCount}/${topN.totalCount})`
-        : `Top risk (${topN.shownCount}/${topN.totalCount})`;
-      lines.push(`${topLabel}   [--details for explanation]`);
-    } else {
-      lines.push(`Top ${topN.shownCount} risk${topN.shownCount > 1 ? 's' : ''}`);
+    if (!config.showAll && sorted.length > topN) {
+      const hiddenCount = sorted.length - topN;
+      lines.push(chalk.gray(`... and ${hiddenCount} more (use --show-all to see all)`));
+      lines.push('');
     }
-    lines.push(SEPARATOR);
 
-    let rank = 1;
-    for (const issue of topN.top) {
-      if (isDetails) {
-        lines.push(formatIssueDetailed(issue, rank, useColors));
-      } else {
-        lines.push(formatIssueCompact(issue, rank, useColors));
+    if (result.summary.blockerCount > 0) {
+      lines.push(chalk.bold.yellow('What to do next'));
+      const firstBlocker = topFiles.find(f => getRiskSeverity(f.riskScore) === 'CRITICAL' || f.riskScore >= 8.0);
+      if (firstBlocker) {
+        const fileName = path.basename(firstBlocker.path);
+        lines.push(`- Review the ${chalk.bold(getRiskSeverity(firstBlocker.riskScore))} file first (${fileName})`);
+        lines.push(`- Run tests or add rollback-safe guards`);
       }
-      rank++;
+      lines.push(chalk.gray('- Use --details for full evidence and policy evaluation'));
+      lines.push('');
     }
-
-    lines.push('');
-    lines.push(
-      `Summary: blockers=${topN.blockers.length} | warnings=${
-        topN.warnings.length
-      } | highest=${highestRisk.toFixed(1)} | exit=${result.exitCode}`,
-    );
   }
 
-  lines.push('');
-  return lines.join('\n');
-}
-
-/**
- * Format a single issue in compact format (DEFAULT)
- */
-function formatIssueCompact(issue: RuleResult, rank: number, useColors: boolean): string {
-  const lines: string[] = [];
-  const severity = getSeverityFromRule(issue);
-  const severityLabel =
-    severity === 'blocker' ? 'BLOCKER' : severity === 'warning' ? 'WARNING' : 'INFO';
-
-  const changedLines = (issue.file as any).changedLines || 0;
-  const blastRadius = issue.file.blastRadius || 0;
-
-  lines.push(issue.file.path);
-  lines.push(
-    `Risk: ${issue.file.riskScore.toFixed(
-      1,
-    )}  ${severityLabel} | Δ lines: ${changedLines} | Blast radius: ${blastRadius}`,
-  );
-
-  const whySentence = deriveWhySentence(issue);
-  lines.push(`Why: ${whySentence}`);
-  lines.push(SEPARATOR);
-
-  return lines.join('\n');
-}
-
-/**
- * Format a single issue in detailed format (--details)
- */
-function formatIssueDetailed(issue: RuleResult, rank: number, useColors: boolean): string {
-  const lines: string[] = [];
-  const severity = getSeverityFromRule(issue);
-  const severityLabel =
-    severity === 'blocker' ? 'BLOCKER' : severity === 'warning' ? 'WARNING' : 'INFO';
-
-  const changedLines = (issue.file as any).changedLines || 0;
-  const blastRadius = issue.file.blastRadius || 0;
-
-  lines.push('');
-  lines.push(`${rank}) ${issue.file.path}`);
-  lines.push(
-    `   Risk: ${issue.file.riskScore.toFixed(
-      1,
-    )}  ${severityLabel}   | Δ lines: ${changedLines} | Blast radius: ${blastRadius}`,
-  );
-  lines.push('');
-
-  const whySentence = deriveWhySentence(issue);
-  lines.push(`   Why this file:`);
-  lines.push(`   ${whySentence}`);
-  lines.push('');
-
-  const breakdown = (issue.file as any).riskBreakdown;
-  if (breakdown) {
-    lines.push(`   Risk breakdown:`);
-    lines.push(`     Behavioral:      +${breakdown.behavioral?.toFixed(1) || '0.0'}`);
-    lines.push(
-      `     Maintainability: +${
-        breakdown.maintainability?.toFixed(1) || '0.0'
-      }   (cannot block alone)`,
-    );
-    lines.push(`     Critical:        +${breakdown.critical?.toFixed(1) || '0.0'}`);
-    lines.push('');
-  }
-
-  if (issue.file.evidence && issue.file.evidence.length > 0) {
-    lines.push(`   Evidence (top 3):`);
-    const topEvidence = issue.file.evidence.slice(0, 3);
-    for (const ev of topEvidence) {
-      const tag = ev.tag || 'unknown';
-      lines.push(`     L${ev.line}  [${tag}]`);
-      lines.push(`           ${ev.message}`);
+  if (result.ignoredFiles.length > 0) {
+    lines.push(chalk.bold(`Ignored files (${result.ignoredFiles.length})`) + chalk.gray('  [use --explain-ignore for details]'));
+    const preview = result.ignoredFiles.slice(0, 4);
+    for (const file of preview) {
+      lines.push(chalk.gray(`- ${file.path} (${file.reason})`));
+    }
+    if (result.ignoredFiles.length > 4) {
+      lines.push(chalk.gray(`... and ${result.ignoredFiles.length - 4} more`));
     }
     lines.push('');
   }
 
-  if (issue.actions.length > 0) {
-    lines.push('   Do next:');
-    for (const action of issue.actions.slice(0, 3)) {
-      if ('command' in action && action.command) {
-        lines.push(`     Run:    ${action.command}`);
-      } else if ('reviewers' in action && action.reviewers) {
-        lines.push(`     Review: ${(action.reviewers as string[]).join(', ')}`);
-      } else {
-        lines.push(`     Check:  ${action.text}`);
+  if (result.warnings.length > 0) {
+    lines.push(chalk.yellow(`⚠ Warnings (${result.warnings.length})`));
+    for (const warn of result.warnings) {
+      lines.push(chalk.yellow(`  ${warn.message}`));
+    }
+    lines.push('');
+  }
+
+  lines.push(chalk.gray('Tip: use --format markdown for PR comments or --format json for CI parsers.'));
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function formatDetailedOutput(result: AnalysisResult, config: ConsoleOutputConfig): string {
+  const lines: string[] = [];
+
+  lines.push('');
+  lines.push(chalk.bold.cyan(`DiffeSense ${VERSION}`) + chalk.gray(' — DETAILED ANALYSIS'));
+  lines.push('');
+
+  const sorted = sortFilesBySeverity(result.files);
+  const topN = config.topN || 3;
+  const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
+
+  for (const file of topFiles) {
+    lines.push(chalk.bold(`Details: ${file.path}`));
+    lines.push(`- Risk: ${chalk.bold(file.riskScore.toFixed(1))} (${formatSeverityLabel(file.severity)})  |  Blast radius: ${file.blastRadius}`);
+    
+    if (file.evidence.length > 0) {
+      lines.push('- Signals:');
+      for (const ev of file.evidence) {
+        const icon = ev.severity === 'error' ? '✗' : ev.severity === 'warning' ? '⚠' : '•';
+        const lineInfo = ev.line ? ` (line ${ev.line})` : '';
+        lines.push(`  ${icon} ${ev.message}${lineInfo}`);
       }
     }
+
+    if (file.riskReasons.length > 0) {
+      lines.push('- Risk reasons:');
+      for (const reason of file.riskReasons.slice(0, 3)) {
+        lines.push(`  • ${reason}`);
+      }
+    }
+
+    lines.push('');
   }
 
-  lines.push(SEPARATOR);
+  if (result.evaluation) {
+    lines.push(chalk.bold('Policy evaluation'));
+    lines.push(`- Outcome: ${result.exitCode === 0 ? chalk.green('PASS') : chalk.red('FAIL')}`);
+    lines.push(`- Blockers: ${result.evaluation.blockers.length}`);
+    lines.push(`- Warnings: ${result.evaluation.warnings.length}`);
+    lines.push(`- Exit code: ${result.exitCode}`);
+    lines.push('');
+  }
+
   return lines.join('\n');
 }
 
-/**
- * Get severity from rule result
- */
-function getSeverityFromRule(issue: RuleResult): 'blocker' | 'warning' | 'info' {
-  if (issue.file.riskScore >= 8.0) return 'blocker';
-  if (issue.file.riskScore >= 6.0) return 'warning';
-  return 'info';
-}
+function formatFileTable(files: Array<{ path: string; riskScore: number; severity: string; blastRadius: number; riskReasons: string[] }>): string {
+  const lines: string[] = [];
 
-/**
- * Get highest risk score from results
- */
-function getHighestRisk(topN: TopNResult): number {
-  const allIssues = [...topN.blockers, ...topN.warnings, ...topN.infos];
-  if (allIssues.length === 0) return 0;
-  return Math.max(...allIssues.map((i) => i.file.riskScore));
-}
+  const header = `${chalk.bold('Risk')}  ${chalk.bold('Sev')}      ${chalk.bold('Blast')}  ${chalk.bold('File')}                                  ${chalk.bold('Why (top reasons)')}`;
+  lines.push(header);
 
-/**
- * Get overall severity
- */
-function getOverallSeverity(topN: TopNResult): 'blocker' | 'warning' | 'info' {
-  if (topN.blockers.length > 0) return 'blocker';
-  if (topN.warnings.length > 0) return 'warning';
-  return 'info';
-}
+  for (const file of files) {
+    const risk = file.riskScore.toFixed(1).padEnd(4);
+    const sev = formatSeverityLabel(file.severity).padEnd(8);
+    const blast = String(file.blastRadius).padEnd(5);
+    const fileName = file.path.length > 40 ? '...' + file.path.slice(-37) : file.path.padEnd(40);
+    const reasons = file.riskReasons.slice(0, 3).join('; ');
+    const reasonsShort = reasons.length > 60 ? reasons.slice(0, 57) + '...' : reasons;
 
-/**
- * Calculate overall confidence from top N results
- */
-function calculateOverallConfidence(topN: TopNResult): number {
-  const allIssues = [...topN.blockers, ...topN.warnings, ...topN.infos];
-  if (allIssues.length === 0) return 1.0;
-
-  const confidences = allIssues.map((issue) => {
-    const breakdown = (issue.file as any).riskBreakdown;
-    return breakdown?.confidence || 0.7;
-  });
-
-  const avg = confidences.reduce((sum, c) => sum + c, 0) / confidences.length;
-  return avg;
-}
-
-/**
- * Format confidence as label
- */
-function formatConfidenceLabel(confidence: number): string {
-  if (confidence >= 0.8) return 'HIGH';
-  if (confidence >= 0.6) return 'MEDIUM';
-  return 'LOW';
-}
-
-/**
- * Derive "Why" sentence from issue
- */
-function deriveWhySentence(issue: RuleResult): string {
-  const breakdown = (issue.file as any).riskBreakdown;
-  const blastRadius = issue.file.blastRadius || 0;
-
-  if (breakdown) {
-    const { behavioral = 0, critical = 0, maintainability = 0 } = breakdown;
-
-    if (critical > 0) {
-      return 'Critical signals present (auth, payments, security)';
-    }
-
-    if (blastRadius > 10) {
-      return `High blast radius (${blastRadius} dependent files)`;
-    }
-
-    if (behavioral > maintainability) {
-      return 'Behavioral side-effects detected in changed lines';
-    }
-
-    if (maintainability > 0) {
-      return 'Maintainability issues detected (complexity, nesting)';
-    }
+    const color = getSeverityColor(file.severity as any);
+    lines.push(chalk[color](`${risk}  ${sev}  ${blast}  `) + fileName + '  ' + chalk.gray(reasonsShort));
   }
 
-  if (issue.file.riskReasons.length > 0) {
-    return issue.file.riskReasons[0];
-  }
-
-  return 'Risk signals detected in changed lines';
+  return lines.join('\n');
 }
 
-export { formatConsoleOutput as formatOutput };
+function formatSeverityLabel(severity: string): string {
+  switch (severity) {
+    case 'CRITICAL':
+      return chalk.red.bold('CRITICAL');
+    case 'HIGH':
+      return chalk.yellow.bold('HIGH');
+    case 'MED':
+      return chalk.cyan('MED');
+    case 'LOW':
+      return chalk.gray('LOW');
+    default:
+      return severity;
+  }
+}

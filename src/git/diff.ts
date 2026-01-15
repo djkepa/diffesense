@@ -32,11 +32,17 @@ export function getChangedFiles(options: DiffOptions): ChangedFile[] {
   const { scope, cwd = process.cwd(), ignoreConfig } = options;
   const base = options.base || detectBaseBranch(cwd);
 
+  const sourceOptions: SourceFileOptions = {
+    includeTests: ignoreConfig?.includeTests,
+    includeConfig: ignoreConfig?.includeConfig,
+  };
+
   let args: string[];
 
   switch (scope) {
     case 'branch':
-      args = ['diff', '--name-status', `origin/${base}...HEAD`];
+      const remote = detectUpstreamRemote(cwd, base);
+      args = ['diff', '--name-status', remote ? `${remote}/${base}...HEAD` : `${base}...HEAD`];
       break;
     case 'staged':
       args = ['diff', '--cached', '--name-status'];
@@ -74,15 +80,54 @@ export function getChangedFiles(options: DiffOptions): ChangedFile[] {
       });
 
       if (fallbackResult.status === 0 && fallbackResult.stdout) {
-        files = parseGitNameStatus(fallbackResult.stdout);
+        files = parseGitNameStatus(fallbackResult.stdout, sourceOptions);
       }
     }
   } else {
-    files = parseGitNameStatus(result.stdout || '');
+    files = parseGitNameStatus(result.stdout || '', sourceOptions);
   }
 
   const ignorePatterns = buildIgnoreList(ignoreConfig);
   return files.filter((f) => !shouldIgnore(f.path, ignorePatterns));
+}
+
+/**
+ * Detect the upstream remote for a branch
+ * Returns 'origin' if it exists, otherwise checks for other common remotes
+ */
+function detectUpstreamRemote(cwd: string, branch: string): string | null {
+  const originCheck = spawnSync('git', ['remote', 'get-url', 'origin'], {
+    cwd,
+    stdio: 'pipe',
+  });
+
+  if (originCheck.status === 0) {
+    return 'origin';
+  }
+
+  const upstreamCheck = spawnSync('git', ['remote', 'get-url', 'upstream'], {
+    cwd,
+    stdio: 'pipe',
+  });
+
+  if (upstreamCheck.status === 0) {
+    return 'upstream';
+  }
+
+  const remotesResult = spawnSync('git', ['remote'], {
+    cwd,
+    encoding: 'utf-8',
+    stdio: 'pipe',
+  });
+
+  if (remotesResult.status === 0 && remotesResult.stdout) {
+    const remotes = remotesResult.stdout.trim().split('\n').filter(Boolean);
+    if (remotes.length > 0) {
+      return remotes[0];
+    }
+  }
+
+  return null;
 }
 
 export function detectBaseBranch(cwd: string = process.cwd()): string {
@@ -120,17 +165,25 @@ export function detectBaseBranch(cwd: string = process.cwd()): string {
 /**
  * Parse git diff --name-status output
  * @param output - Raw git output
+ * @param sourceOptions - Options for source file filtering
  * @returns Parsed changed files
  */
-function parseGitNameStatus(output: string): ChangedFile[] {
+function parseGitNameStatus(output: string, sourceOptions: SourceFileOptions = {}): ChangedFile[] {
   const lines = output.trim().split('\n').filter(Boolean);
   const files: ChangedFile[] = [];
 
   for (const line of lines) {
-    const [status, ...pathParts] = line.split('\t');
-    const filePath = pathParts.join('\t');
+    const parts = line.split('\t');
+    const status = parts[0];
 
-    if (!filePath || !isSourceFile(filePath)) continue;
+    let filePath: string;
+    if (status.startsWith('R') || status.startsWith('C')) {
+      filePath = parts[2] || parts[1];
+    } else {
+      filePath = parts.slice(1).join('\t');
+    }
+
+    if (!filePath || !isSourceFile(filePath, sourceOptions)) continue;
 
     files.push({
       path: filePath,
@@ -141,25 +194,41 @@ function parseGitNameStatus(output: string): ChangedFile[] {
   return files;
 }
 
+export interface SourceFileOptions {
+  includeTests?: boolean;
+  includeConfig?: boolean;
+}
+
 /**
- * Check if file is a JS/TS source file (not test/config)
+ * Check if file is a JS/TS source file
  * @param filePath - Path to check
+ * @param options - Options to include tests/config files
  * @returns true if it's a source file we should analyze
  */
-function isSourceFile(filePath: string): boolean {
+function isSourceFile(filePath: string, options: SourceFileOptions = {}): boolean {
   const ext = path.extname(filePath).toLowerCase();
   const validExts = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 
   if (!validExts.includes(ext)) return false;
 
   const lower = filePath.toLowerCase();
-
-  if (lower.includes('.test.') || lower.includes('.spec.')) return false;
-  if (lower.includes('__tests__') || lower.includes('__mocks__')) return false;
-
   const fileName = path.basename(lower);
+
   if (fileName.startsWith('.')) return false;
-  if (fileName.includes('config')) return false;
+
+  if (!options.includeTests) {
+    if (lower.includes('.test.') || lower.includes('.spec.')) return false;
+    if (lower.includes('__tests__') || lower.includes('__mocks__')) return false;
+  }
+
+  if (!options.includeConfig) {
+    if (
+      fileName.match(/^config\.(js|ts|mjs|cjs)$/) ||
+      fileName.match(/\.(config|rc)\.(js|ts|mjs|cjs|json|yml|yaml)$/)
+    ) {
+      return false;
+    }
+  }
 
   return true;
 }

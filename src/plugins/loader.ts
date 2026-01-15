@@ -28,11 +28,10 @@ export async function loadPackFromPackage(
   packageName: string,
 ): Promise<DetectorPackManifest | null> {
   try {
-    const packagePath = require.resolve(packageName);
-    const packageDir = path.dirname(packagePath);
-    const manifestPath = path.join(packageDir, 'package.json');
+    const entryPath = require.resolve(packageName);
+    const manifestPath = findPackageJson(entryPath);
 
-    if (!fs.existsSync(manifestPath)) {
+    if (!manifestPath) {
       console.warn(`Package ${packageName} has no package.json`);
       return null;
     }
@@ -49,6 +48,26 @@ export async function loadPackFromPackage(
     console.warn(`Could not load pack ${packageName}: ${error}`);
     return null;
   }
+}
+
+/**
+ * Find package.json by walking up directory tree from entry file
+ */
+function findPackageJson(startPath: string): string | null {
+  let currentDir = path.dirname(startPath);
+  const root = path.parse(currentDir).root;
+
+  while (currentDir !== root) {
+    const manifestPath = path.join(currentDir, 'package.json');
+    if (fs.existsSync(manifestPath)) {
+      return manifestPath;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) break;
+    currentDir = parentDir;
+  }
+
+  return null;
 }
 
 /**

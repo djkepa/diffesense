@@ -10,12 +10,11 @@ All output formats use the same status mapping:
 
 | Exit Code | Status | Icon | Meaning |
 |-----------|--------|------|---------|
-| **0** | **PASS** | ✔ | No blockers, safe to merge |
-| **0** | **WARN** | ! | Warnings present, but no blockers (still safe to merge) |
-| **1** | **FAIL** | ✖ | Blockers detected, merge should be blocked |
-| **2** | **ERROR** | ✖ | Internal error or invalid config, investigate |
+| **0** | **PASS** | ✅ | No blockers, safe to merge |
+| **1** | **FAIL** | ❌ | Blockers detected, merge should be blocked |
+| **2** | **ERROR** | ⛔ | Internal error or invalid config, investigate |
 
-**Note:** WARN status has exit code 0 (safe to merge) but indicates that warnings were found.
+**Note:** Exit code 0 = safe to merge. Exit code 1 = blockers detected. Exit code 2 = error.
 
 ---
 
@@ -28,30 +27,26 @@ Human-readable format with colors for terminal use.
 ```bash
 $ dsense --range HEAD~10..HEAD
 
-DIFFESENSE
-============================================================
-Scope:     range
-Profile:   minimal
-Changed:   12 files | Analyzed: 12
+DiffeSense 1.1.0  •  risk gate for code changes
+Repo: my-app  |  CWD: /home/user/my-app
+Scope: range  |  Base: main  |  Range: HEAD~10..HEAD
+Profile: minimal  |  Detector: auto
+Config: defaults  |  Schema: 1.0.0
 
-Decision:  PASS ✔
-Highest:   4.0/10  LOW   | Confidence: MEDIUM (0.72)
+Summary
+- Changed: 12 files  |  Analyzed: 12  |  Ignored: 0  |  Warnings: 0
+- Highest risk: 4.0/10  |  Blockers: 0  |  Exit code: 0
 
-Top risk (1/1)   [--details for explanation]
-------------------------------------------------------------
-src/.../MosaicModule.tsx
-Risk: 4.0  INFO | Δ lines: 18 | Blast radius: 0
-Why: Behavioral side-effects detected in changed lines
-------------------------------------------------------------
-
-Summary: blockers=0 | warnings=0 | highest=4.0 | exit=0
+Top 3 risky files
+Risk  Sev   Blast  File                           Why (top reasons)
+4.0   MED   0      src/components/MosaicModule.tsx   behavioral side-effects
 ```
 
 **Features:**
-- ✅ Decision first (PASS/WARN/FAIL)
-- ✅ Confidence score
-- ✅ One-line "Why" explanation
-- ✅ Compact, scannable format
+- ✅ Clear header with version and metadata
+- ✅ Summary with key metrics
+- ✅ Deterministic table format
+- ✅ Severity classification (CRITICAL/HIGH/MED/LOW)
 - ✅ CI-friendly
 
 ### Detailed Format (`--details`)
@@ -161,9 +156,9 @@ $ dsense --format markdown
 - ✅ Selection criteria rationale
 
 **Status Icons:**
-- `✔ PASS` - No blockers
-- `! WARN` - Warnings present
-- `✖ FAIL` - Blockers detected
+- `✅ PASS` - No blockers (exit 0)
+- `❌ FAIL` - Blockers detected (exit 1)
+- `⛔ ERROR` - Internal error (exit 2)
 
 ---
 
@@ -179,76 +174,48 @@ $ dsense --format json
 
 ```json
 {
-  "tool": "diffesense",
-  "version": "1.0.0",
-  "timestamp": "2026-01-09T14:30:00.000Z",
-  "context": {
+  "schemaVersion": "1.0.0",
+  "toolVersion": "1.1.0",
+  "success": true,
+  "exitCode": 0,
+  "status": "PASS",
+  "meta": {
+    "cwd": "/home/user/my-app",
+    "repo": "my-app",
     "scope": "range",
     "base": "main",
+    "range": "HEAD~10..HEAD",
+    "profile": "minimal",
+    "detector": "auto",
+    "config": { "source": "defaults" },
     "branch": "feature/my-feature",
-    "profile": "minimal"
+    "timestamp": "2026-01-15T14:30:00.000Z"
   },
   "summary": {
-    "status": "PASS",
-    "changedFiles": 12,
-    "analyzedFiles": 12,
-    "blockers": 0,
-    "warnings": 0,
-    "infos": 1,
+    "changedCount": 12,
+    "analyzedCount": 12,
+    "ignoredCount": 0,
+    "warningCount": 0,
     "highestRisk": 4.0,
-    "confidence": 0.72,
-    "exitCode": 0,
-    "isLimited": true,
-    "totalIssues": 3,
-    "shownIssues": 1
+    "blockerCount": 0,
+    "topN": 3
   },
-  "issues": [
+  "files": [
     {
-      "rank": 1,
-      "severity": "info",
-      "ruleId": "risk-threshold",
-      "file": {
-        "path": "src/.../MosaicModule.tsx",
-        "riskScore": 4.0,
-        "blastRadius": 0
-      },
-      "reasons": [
-        "Behavioral: network-axios, dom-manipulation, async-await (+3.0)",
-        "Style: large-file, deep-nesting (+1.0)"
-      ],
+      "path": "src/components/MosaicModule.tsx",
+      "riskScore": 4.0,
+      "severity": "MED",
+      "blastRadius": 0,
+      "signalTypes": ["network-axios", "dom-manipulation"],
+      "reasons": ["behavioral side-effects"],
       "evidence": [
-        {
-          "line": 128,
-          "message": "Axios request introduced or modified",
-          "severity": "warning",
-          "tag": "behavioral/network-axios"
-        },
-        {
-          "line": 207,
-          "message": "Direct DOM access detected",
-          "severity": "warning",
-          "tag": "behavioral/dom-manipulation"
-        },
-        {
-          "line": 210,
-          "message": "Async boundary added",
-          "severity": "info",
-          "tag": "behavioral/async-await"
-        }
-      ],
-      "actions": [
-        {
-          "type": "test",
-          "text": "Run: npm test -- --testPathPattern=\"components\"",
-          "command": "npm test -- --testPathPattern=\"components\""
-        },
-        {
-          "type": "manual",
-          "text": "Check for effect dependency issues"
-        }
+        { "line": 128, "message": "Axios request", "severity": "warning" }
       ]
     }
-  ]
+  ],
+  "ignoredFiles": [],
+  "warnings": [],
+  "evaluation": null
 }
 ```
 
@@ -261,8 +228,8 @@ $ dsense --format json
 
 **Status Values:**
 - `"PASS"` - No blockers (exit code 0)
-- `"WARN"` - Warnings present (exit code 0)
 - `"FAIL"` - Blockers detected (exit code 1)
+- `"ERROR"` - Internal error (exit code 2)
 
 ---
 
@@ -370,19 +337,15 @@ dsense --format json
 All formats respect the same exit codes:
 
 ```bash
-# PASS (exit 0)
+# PASS (exit 0) - safe to merge
 dsense
 echo $?  # 0
 
-# WARN (exit 0, but warnings present)
-dsense  # warnings detected
-echo $?  # 0
-
-# FAIL (exit 1)
+# FAIL (exit 1) - blockers detected
 dsense  # blockers detected
 echo $?  # 1
 
-# ERROR (exit 2)
+# ERROR (exit 2) - something went wrong
 dsense --config invalid.yml
 echo $?  # 2
 ```

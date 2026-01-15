@@ -25,32 +25,20 @@ DiffeSense uses standard Unix exit codes for CI integration:
 
 ---
 
-## Status Levels: PASS / WARN / FAIL
+## Status Levels: PASS / FAIL / ERROR
 
 DiffeSense evaluates changes and assigns one of three statuses:
 
 ### ✅ PASS (Exit 0)
 - **No blockers detected**
-- May have warnings or info-level signals
+- May have info-level signals or low-risk files
 - Safe to merge (within configured risk tolerance)
 
 **Example:**
 ```
-Status: ✅ PASS
-PR Risk: 3.2/10 (Medium Confidence)
-Top risks: 2 files
-```
-
-### ⚠️ WARN (Exit 0)
-- **Warnings present, but no blockers**
-- Requires attention but doesn't block merge
-- Typically: medium-risk behavioral changes
-
-**Example:**
-```
-Status: ⚠️ WARN
-PR Risk: 5.8/10 (High Confidence)
-Top risks: 3 files
+Status: ✅ PASS (exit code: 0)
+Highest risk: 3.2/10
+Blockers: 0
 ```
 
 ### ❌ FAIL (Exit 1)
@@ -60,9 +48,20 @@ Top risks: 3 files
 
 **Example:**
 ```
-Status: ❌ FAIL
-PR Risk: 8.9/10 (High Confidence)
-Top risks: 3 files (1 blocker)
+Status: ❌ FAIL (exit code: 1)
+Highest risk: 8.9/10
+Blockers: 1
+```
+
+### ⛔ ERROR (Exit 2)
+- **Internal error or invalid configuration**
+- Analysis could not complete
+- Investigate and fix before re-running
+
+**Example:**
+```
+Status: ⛔ ERROR (exit code: 2)
+Error: Not a git repository
 ```
 
 ---

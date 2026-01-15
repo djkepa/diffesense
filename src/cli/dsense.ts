@@ -4,19 +4,13 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getChangedFiles, getCurrentBranch, isGitRepo, DiffScope, parseGitDiff } from '../git/diff';
-import { analyzeProject, ChangedFileDetail } from '../analyzers';
-import { calculateBlastRadius } from '../analyzers/blastRadius';
-import { evaluateRules, AnalyzedFile, Evidence, EvaluationOptions } from '../policy/engine';
-import { loadConfig, getProfileRules, validateConfig } from '../policy/loader';
+import { isGitRepo, DiffScope } from '../git/diff';
+import { analyze } from '../core/analyze';
 import { formatConsoleOutput } from '../output/formatters/dsConsole';
 import { formatMarkdownOutput } from '../output/formatters/dsMarkdown';
 import { formatJsonOutput } from '../output/formatters/dsJson';
 import { DetectorProfile } from '../signals';
-import { buildIgnoreList, shouldIgnore } from '../core/ignore';
-import { ActionMapping } from '../core/actions';
-
-const VERSION = '1.0.0';
+import { VERSION } from '../version';
 
 const program = new Command();
 
@@ -560,8 +554,8 @@ jobs:
           dsense --base \${{ github.event.pull_request.base.ref }} --format json > report.json || true
           dsense --base \${{ github.event.pull_request.base.ref }} --format markdown > report.md || true
 
-          EXIT_CODE=\$(cat report.json | jq -r '.summary.exitCode 
-          RISK=\$(cat report.json | jq -r '.summary.highestRisk 
+          EXIT_CODE=\$(cat report.json | jq -r '.summary.exitCode // 0')
+          RISK=\$(cat report.json | jq -r '.summary.highestRisk // 0')
           echo "exit_code=\$EXIT_CODE" >> \$GITHUB_OUTPUT
           echo "risk=\$RISK" >> \$GITHUB_OUTPUT
 
@@ -689,7 +683,7 @@ diffesense:
     - dsense --base $CI_MERGE_REQUEST_TARGET_BRANCH_NAME --format markdown > report.md || true
     - cat report.md
     - |
-      EXIT_CODE=$(cat report.json | jq -r '.summary.exitCode 
+      EXIT_CODE=$(cat report.json | jq -r '.summary.exitCode // 0')
       if [ "$EXIT_CODE" = "1" ]; then
         echo "High-risk changes detected"
       fi
@@ -722,9 +716,9 @@ diffesense:
 }
 
 /**
- * Main analysis function
+ * CLI Analysis Options
  */
-async function runAnalysis(options: {
+interface CLIAnalysisOptions {
   scope?: string;
   base?: string;
   commit?: string;
@@ -747,235 +741,153 @@ async function runAnalysis(options: {
   determinismCheck?: boolean;
   explainIgnore?: boolean;
   details?: boolean;
-}): Promise<void> {
+}
+
+/**
+ * CLI Analysis result (for backwards compatibility)
+ */
+export interface CliAnalysisResult {
+  output: string;
+  exitCode: 0 | 1 | 2;
+  summary: {
+    changedCount: number;
+    analyzedCount: number;
+    highestRisk: number;
+    blockerCount: number;
+    warningCount: number;
+  };
+}
+
+/**
+ * Main analysis function - thin wrapper around core analyze()
+ */
+async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysisResult> {
   const cwd = process.cwd();
-  let scope = (options.scope || 'branch') as DiffScope;
-
-  if (options.commit) {
-    scope = 'commit';
-  } else if (options.range) {
-    scope = 'range';
-  }
-
   const format = options.format || 'console';
   const quiet = options.quiet || false;
-  const skipBlastRadius = options.blastRadius === false;
-  const analyzeAll = options.all || false;
-  const detectorProfile = (options.detector || 'auto') as DetectorProfile;
-  const contextLines = options.context || 5;
-  const useDiffFocus = options.diffFocus !== false;
-  const useClassBasedScoring = options.classScoring !== false;
   const determinismCheck = options.determinismCheck || false;
   const explainIgnoreFlag = options.explainIgnore || false;
 
-  if (!isGitRepo(cwd)) {
-    console.error(chalk.red('Not a git repository'));
-    process.exit(2);
-  }
-
-  const config = loadConfig(options.config, cwd);
-  const base = options.base || config.scope?.base || 'main';
-  const profile = options.profile || config.profile || 'minimal';
-
-  const configIgnore = config.ignore;
-  const ignorePatterns_config = Array.isArray(configIgnore)
-    ? configIgnore
-    : (configIgnore as { patterns?: string[] })?.patterns;
-
-  const ignoreConfig = {
-    includeTests: options.includeTests || false,
-    includeConfig: options.includeConfig || false,
-    patterns: ignorePatterns_config,
-  };
-  const ignorePatterns = buildIgnoreList(ignoreConfig);
-
   if (explainIgnoreFlag) {
+    const { getChangedFiles } = require('../git/diff');
     const { explainIgnoreMultiple, formatIgnoreExplanations } = require('../core/ignore');
+
+    let scope: DiffScope = (options.scope || 'branch') as DiffScope;
+    if (options.commit) scope = 'commit';
+    else if (options.range) scope = 'range';
+
     const changedFiles = getChangedFiles({
       scope,
-      base,
+      base: options.base || 'main',
       commit: options.commit,
       range: options.range,
       cwd,
-      ignoreConfig: {},
+      ignoreConfig: { includeTests: true, includeConfig: true },
     });
+
+    const ignoreConfig = {
+      includeTests: options.includeTests || false,
+      includeConfig: options.includeConfig || false,
+    };
+
     const allPaths = changedFiles.map((f: { path: string }) => f.path);
     const explanations = explainIgnoreMultiple(allPaths, ignoreConfig);
-    console.log(formatIgnoreExplanations(explanations));
-    process.exit(0);
+
+    return {
+      output: formatIgnoreExplanations(explanations),
+      exitCode: 0,
+      summary: {
+        changedCount: allPaths.length,
+        analyzedCount: 0,
+        highestRisk: 0,
+        blockerCount: 0,
+        warningCount: 0,
+      },
+    };
   }
 
-  const actionMappings: ActionMapping[] = (config.actions?.mapping || []).map((m) => ({
-    pattern: m.pattern,
-    actions: [
-      ...(m.commands || []).map((cmd) => ({
-        type: 'test' as const,
-        text: `Run: ${cmd}`,
-        command: cmd,
-        automated: true,
-        priority: 1,
-      })),
-      ...(m.reviewers || []).map((reviewer) => ({
-        type: 'review' as const,
-        text: `Request review from ${reviewer}`,
-        reviewers: [reviewer],
-        automated: false,
-        priority: 2,
-      })),
-    ],
-  }));
-
-  let filesToAnalyze: string[] = [];
-  let changedFileDetails: ChangedFileDetail[] = [];
-
-  if (analyzeAll) {
-    filesToAnalyze = [];
-    changedFileDetails = [];
-  } else {
-    const changedFiles = getChangedFiles({
-      scope,
-      base,
-      commit: options.commit,
-      range: options.range,
-      cwd,
-      ignoreConfig,
-    });
-
-    if (changedFiles.length === 0) {
-      if (!quiet) {
-        console.log('No source files changed');
-      }
-      process.exit(0);
-    }
-
-    filesToAnalyze = changedFiles.map((f) => f.path);
-
-    if (useDiffFocus) {
-      const diffDetails = parseGitDiff({
-        scope,
-        base,
-        commit: options.commit,
-        range: options.range,
-        cwd,
-        contextLines: 0,
-      });
-
-      changedFileDetails = diffDetails
-        .filter((d) => !shouldIgnore(d.path, ignorePatterns))
-        .map((d) => ({
-          path: d.path,
-          status: d.status,
-          ranges: d.ranges,
-          totalLinesChanged: d.totalLinesChanged,
-          oldPath: d.oldPath,
-        }));
-    }
-  }
-
-  const analysis = await analyzeProject({
-    rootPath: cwd,
-    includePatterns: config.patterns?.include,
-    excludePatterns: config.patterns?.exclude,
-    files: analyzeAll ? undefined : filesToAnalyze,
-    detectorProfile,
-    changedFileDetails: useDiffFocus ? changedFileDetails : undefined,
-    contextLines,
-    useClassBasedScoring,
+  const result = await analyze({
+    cwd,
+    scope: options.scope as DiffScope,
+    base: options.base,
+    commit: options.commit,
+    range: options.range,
+    profile: options.profile,
+    detector: options.detector as DetectorProfile,
+    configPath: options.config,
+    threshold: options.threshold,
+    includeTests: options.includeTests,
+    includeConfig: options.includeConfig,
+    contextLines: options.context,
+    skipBlastRadius: options.blastRadius === false,
+    fullFileAnalysis: options.diffFocus === false,
+    classBasedScoring: options.classScoring,
+    analyzeAll: options.all,
   });
 
-  if (analysis.analyzedFiles.length === 0) {
-    if (!quiet) {
-      console.log('No analyzable files found');
-    }
-    process.exit(0);
+  if (!result.success) {
+    return {
+      output: chalk.red(result.error || 'Analysis failed'),
+      exitCode: 2,
+      summary: {
+        changedCount: 0,
+        analyzedCount: 0,
+        highestRisk: 0,
+        blockerCount: 0,
+        warningCount: 0,
+      },
+    };
   }
 
-  const analyzedFiles: AnalyzedFile[] = [];
-
-  for (const file of analysis.analyzedFiles) {
-    let blastRadius = 0;
-
-    if (!skipBlastRadius) {
-      const radius = calculateBlastRadius(file.path, analysis.analyzedFiles);
-      blastRadius = radius.totalDependents;
-    }
-
-    const evidence: Evidence[] = file.evidence.map((e) => ({
-      line: e.line,
-      message: e.message,
-      severity: e.severity,
-      tag: e.tag,
-    }));
-
-    analyzedFiles.push({
-      path: file.path,
-      riskScore: file.riskScore,
-      blastRadius,
-      evidence,
-      riskReasons: file.riskReasons,
-      signalTypes: file.signalTypes,
-    });
+  if (result.summary.analyzedCount === 0) {
+    const msg =
+      result.summary.changedCount === 0 ? 'No source files changed' : 'No analyzable files found';
+    return {
+      output: quiet ? '' : msg,
+      exitCode: 0,
+      summary: {
+        changedCount: result.summary.changedCount,
+        analyzedCount: 0,
+        highestRisk: 0,
+        blockerCount: 0,
+        warningCount: 0,
+      },
+    };
   }
 
-  const rules = getProfileRules(profile, config.rules);
-
-  if (options.threshold !== undefined) {
-    rules.unshift({
-      id: 'cli-threshold-override',
-      description: 'CLI threshold override',
-      when: { riskGte: options.threshold },
-      then: { severity: 'blocker' },
-    });
-  }
-
-  if (config.thresholds?.failAboveRisk !== undefined) {
-    rules.unshift({
-      id: 'config-fail-threshold',
-      description: 'Config fail threshold',
-      when: { riskGte: config.thresholds.failAboveRisk },
-      then: { severity: 'blocker' },
-    });
-  }
-
-  const evalOptions: EvaluationOptions = {
-    actionMappings,
-  };
-
-  const result = evaluateRules(analyzedFiles, rules, config.exceptions, evalOptions);
-
-  const context = {
-    scope,
-    base,
-    branch: getCurrentBranch(cwd),
-    profile,
-    changedCount: analyzeAll ? analysis.analyzedFiles.length : filesToAnalyze.length,
-    analyzedCount: analyzedFiles.length,
-    isDiffAnalysis: analysis.isDiffAnalysis,
-  };
-
-  if (quiet && result.blockers.length === 0 && result.warnings.length === 0) {
-    process.exit(0);
+  if (quiet && result.summary.blockerCount === 0 && result.summary.warningCount === 0) {
+    return {
+      output: '',
+      exitCode: 0,
+      summary: {
+        changedCount: result.summary.changedCount,
+        analyzedCount: result.summary.analyzedCount,
+        highestRisk: result.summary.highestRisk,
+        blockerCount: 0,
+        warningCount: 0,
+      },
+    };
   }
 
   const outputConfig = {
     showAll: options.showAll || false,
     topN: options.top || 3,
     details: options.details || false,
+    quiet,
   };
 
   let output: string;
+
   switch (format) {
     case 'markdown':
-      output = formatMarkdownOutput(result, context, outputConfig);
+      output = formatMarkdownOutput(result, outputConfig);
       break;
     case 'json':
-      output = formatJsonOutput(result, context, outputConfig);
+      output = formatJsonOutput(result, outputConfig);
       break;
     default:
-      output = formatConsoleOutput(result, context, outputConfig);
+      output = formatConsoleOutput(result, outputConfig);
   }
-
-  console.log(output);
 
   if (determinismCheck) {
     const {
@@ -987,26 +899,28 @@ async function runAnalysis(options: {
     const { execSync } = require('child_process');
     let diffContent = '';
     try {
-      if (scope === 'staged') {
+      if (result.meta.scope === 'staged') {
         diffContent = execSync('git diff --cached', { cwd, encoding: 'utf-8' });
-      } else if (scope === 'worktree') {
+      } else if (result.meta.scope === 'worktree') {
         diffContent = execSync('git diff', { cwd, encoding: 'utf-8' });
       } else {
-        diffContent = execSync(`git diff ${base}...HEAD`, { cwd, encoding: 'utf-8' });
+        diffContent = execSync(`git diff ${result.meta.base}...HEAD`, { cwd, encoding: 'utf-8' });
       }
     } catch {
       diffContent = '';
     }
 
-    const jsonOutput = formatJsonOutput(result, context, outputConfig);
+    const jsonOutput = formatJsonOutput(result, outputConfig);
+    const signalsDetected = result.files.reduce((sum, f) => sum + f.evidence.length, 0);
+
     const deterministmResult = checkDeterminism(
       {
         diffContent,
-        configJson: JSON.stringify(config),
-        profile,
+        configJson: JSON.stringify(result.config),
+        profile: result.meta.profile,
         options: {
-          scope,
-          base,
+          scope: result.meta.scope,
+          base: result.meta.base,
           topN: outputConfig.topN,
           includeTests: options.includeTests || false,
           includeConfig: options.includeConfig || false,
@@ -1014,18 +928,46 @@ async function runAnalysis(options: {
       },
       {
         resultJson: jsonOutput,
-        filesAnalyzed: analyzedFiles.length,
-        signalsDetected: analyzedFiles.reduce((sum, f) => sum + (f.signals?.length || 0), 0),
+        filesAnalyzed: result.summary.analyzedCount,
+        signalsDetected,
       },
     );
 
-    console.log('');
+    output += '\n';
     if (format === 'json') {
-      console.log(formatDeterminismJson(deterministmResult));
+      output += formatDeterminismJson(deterministmResult);
     } else {
-      console.log(formatDeterminismResult(deterministmResult));
+      output += formatDeterminismResult(deterministmResult);
     }
   }
 
-  process.exit(result.exitCode);
+  return {
+    output,
+    exitCode: result.exitCode,
+    summary: {
+      changedCount: result.summary.changedCount,
+      analyzedCount: result.summary.analyzedCount,
+      highestRisk: result.summary.highestRisk,
+      blockerCount: result.summary.blockerCount,
+      warningCount: result.summary.warningCount,
+    },
+  };
 }
+
+/**
+ * Main CLI entry point - calls performAnalysis and handles exit
+ */
+async function runAnalysis(options: CLIAnalysisOptions): Promise<void> {
+  try {
+    const result = await performAnalysis(options);
+    if (result.output) {
+      console.log(result.output);
+    }
+    process.exit(result.exitCode);
+  } catch (error) {
+    console.error(chalk.red('Error:'), error instanceof Error ? error.message : error);
+    process.exit(2);
+  }
+}
+
+export { performAnalysis };

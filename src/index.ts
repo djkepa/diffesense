@@ -1,41 +1,31 @@
-export * from './signals';
-export {
-  getChangedFiles,
-  getCurrentBranch,
-  isGitRepo,
-  DiffScope,
-  DiffOptions,
-  ChangedFile,
-} from './git/diff';
+/**
+ * DiffeSense - Framework-agnostic JavaScript/TypeScript change-risk engine
+ *
+ * Public API - these exports are stable and covered by semantic versioning.
+ */
 
 export {
-  analyzeProject,
+  analyze,
   AnalyzeOptions,
-  AnalyzedFile,
-  Evidence,
-  ProjectAnalysis,
-} from './analyzers';
-export { calculateBlastRadius, BlastRadiusResult } from './analyzers/blastRadius';
+  AnalysisResult,
+  AnalyzedFileResult,
+  IgnoredFile,
+  AnalysisWarning,
+  AnalysisMeta,
+} from './core/analyze';
 
 export {
-  evaluateRules,
-  Rule,
-  RuleCondition,
-  RuleAction,
-  ActionItem,
-  RuleResult,
-  EvaluationResult,
-  Exception,
-} from './policy/engine';
-export {
-  loadConfig,
-  getProfileRules,
-  validateConfig,
-  getBaselineRules,
-  DiffeSenseConfig,
-} from './policy/loader';
-export { getProfile, ProfileName, profiles } from './policy/profiles';
+  RiskSeverity,
+  getRiskSeverity,
+  getSeverityColor,
+  sortFilesBySeverity,
+} from './core/severity';
 
 export { formatConsoleOutput, OutputContext } from './output/formatters/dsConsole';
 export { formatMarkdownOutput } from './output/formatters/dsMarkdown';
 export { formatJsonOutput, JsonOutput, JsonIssue } from './output/formatters/dsJson';
+
+export type { DiffScope } from './git/diff';
+export type { DetectorProfile } from './signals';
+export type { DiffeSenseConfig } from './config/schema';
+export type { EvaluationResult, RuleResult } from './policy/engine';

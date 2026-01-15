@@ -27,15 +27,18 @@ dsense
 
 **Output:**
 ```
-DIFFESENSE
-============================================================
-Overall Risk: 6.5/10 (MEDIUM)
-Issues: 3 shown of 5
+DiffeSense 1.1.0  •  risk gate for code changes
+Repo: my-app  |  CWD: /home/user/my-app
+Scope: branch  |  Base: main  |  Range: main...HEAD
+Profile: minimal  |  Detector: auto
 
-TOP RISKS
-------------------------------------------------------------
-1) src/auth/login.ts — Risk 8.2 [BLOCKER]
-   Do next: Run: npm test -- auth
+Summary
+- Changed: 5 files  |  Analyzed: 5  |  Ignored: 0  |  Warnings: 0
+- Highest risk: 8.2/10  |  Blockers: 1  |  Exit code: 1
+
+Top 3 risky files
+Risk  Sev       Blast  File                      Why (top reasons)
+8.2   CRITICAL  12     src/auth/login.ts         auth-sensitive; complex logic
 ```
 
 ### 2. Analyze Specific Commits

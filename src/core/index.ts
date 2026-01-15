@@ -1,4 +1,16 @@
 export {
+  analyze,
+  AnalyzeOptions,
+  AnalysisResult,
+  AnalyzedFileResult,
+  IgnoredFile,
+  AnalysisWarning,
+  AnalysisMeta,
+} from './analyze';
+
+export { RiskSeverity, getRiskSeverity, getSeverityColor, sortFilesBySeverity } from './severity';
+
+export {
   ALWAYS_IGNORE,
   DEFAULT_IGNORE,
   TEST_PATTERNS,

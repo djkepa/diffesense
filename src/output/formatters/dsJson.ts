@@ -1,176 +1,140 @@
-import { EvaluationResult, RuleResult } from '../../policy/engine';
-import { OutputContext } from './dsConsole';
-import { selectTopN, TopNResult } from '../../core/topN';
-
-export interface JsonOutputConfig {
-  showAll?: boolean;
-  topN?: number;
-  pretty?: boolean;
-}
+import { AnalysisResult } from '../../core/analyze';
+import { sortFilesBySeverity } from '../../core/severity';
+import { VERSION, SCHEMA_VERSION } from '../../version';
 
 export interface JsonOutput {
-  tool: string;
-  version: string;
-  timestamp: string;
-  context: {
+  schemaVersion: string;
+  toolVersion: string;
+  success: boolean;
+  exitCode: 0 | 1 | 2;
+  status: 'PASS' | 'FAIL' | 'ERROR';
+  meta: {
+    cwd: string;
+    repo: string;
     scope: string;
     base: string;
-    branch: string | null;
+    range: string;
     profile: string;
+    detector: string;
+    config: {
+      source: string;
+      path?: string;
+    };
+    branch: string | null;
+    timestamp: string;
   };
   summary: {
-    status: 'PASS' | 'WARN' | 'FAIL';
-    changedFiles: number;
-    analyzedFiles: number;
-    blockers: number;
-    warnings: number;
-    infos: number;
+    changedCount: number;
+    analyzedCount: number;
+    ignoredCount: number;
+    warningCount: number;
     highestRisk: number;
-    confidence: number;
-    exitCode: number;
-    isLimited: boolean;
-    totalIssues: number;
-    shownIssues: number;
+    blockerCount: number;
+    topN: number;
   };
-  issues: JsonIssue[];
+  files: JsonIssue[];
+  ignoredFiles: Array<{ path: string; reason: string }>;
+  warnings: Array<{ code: string; message: string; path?: string }>;
+  evaluation: {
+    outcome: 'PASS' | 'FAIL';
+    blockers: Array<{ ruleId: string; message: string; file: string }>;
+    warnings: Array<{ ruleId: string; message: string; file: string }>;
+  } | null;
 }
 
 export interface JsonIssue {
-  rank: number;
-  severity: 'blocker' | 'warning' | 'info';
-  ruleId: string;
-  file: {
-    path: string;
-    riskScore: number;
-    blastRadius: number;
-  };
+  path: string;
+  riskScore: number;
+  severity: 'LOW' | 'MED' | 'HIGH' | 'CRITICAL';
+  blastRadius: number;
+  signalTypes: string[];
   reasons: string[];
   evidence: Array<{
+    signal?: string;
     line?: number;
     message: string;
-    severity: string;
-    tag?: string;
-  }>;
-  actions: Array<{
-    type: string;
-    text: string;
-    command?: string;
-    reviewers?: string[];
+    severity: 'error' | 'warning' | 'info';
   }>;
 }
 
+/**
+ * Format analysis result as JSON for CI/CD parsers
+ */
 export function formatJsonOutput(
-  result: EvaluationResult,
-  context: OutputContext,
-  config: JsonOutputConfig = {},
+  result: AnalysisResult,
+  config: { topN?: number; showAll?: boolean } = {},
 ): string {
-  const topN = selectTopN(result.blockers, result.warnings, result.infos, {
-    showAll: config.showAll || false,
-    limit: config.topN || 3,
-  });
+  const topN = config.topN || 3;
+  const sorted = sortFilesBySeverity(result.files);
+  const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
 
-  const highestRisk = getHighestRisk(topN);
-  const confidence = calculateConfidence(topN);
+  const repoName = result.meta.cwd.split(/[/\\]/).pop() || 'unknown';
+  const range = result.meta.isDiffAnalysis ? `${result.meta.base}...HEAD` : 'full';
 
-  const issues: JsonIssue[] = [];
-  let rank = 1;
-
-  for (const issue of topN.top) {
-    issues.push(formatJsonIssue(issue, rank, getSeverity(issue, topN)));
-    rank++;
-  }
-
-  const status = result.exitCode === 1 ? 'FAIL' : topN.warnings.length > 0 ? 'WARN' : 'PASS';
+  const status: 'PASS' | 'FAIL' | 'ERROR' =
+    result.exitCode === 0 ? 'PASS' : result.exitCode === 1 ? 'FAIL' : 'ERROR';
 
   const output: JsonOutput = {
-    tool: 'diffesense',
-    version: '1.0.0',
-
-    timestamp: process.env.DIFFESENSE_DETERMINISTIC
-      ? '2026-01-01T00:00:00.000Z'
-      : new Date().toISOString(),
-    context: {
-      scope: context.scope,
-      base: context.base,
-      branch: context.branch,
-      profile: context.profile,
+    schemaVersion: SCHEMA_VERSION,
+    toolVersion: VERSION,
+    success: result.success,
+    exitCode: result.exitCode,
+    status,
+    meta: {
+      cwd: result.meta.cwd,
+      repo: repoName,
+      scope: result.meta.scope,
+      base: result.meta.base,
+      range,
+      profile: result.meta.profile,
+      detector: result.meta.detector,
+      config: {
+        source: result.meta.configSource,
+      },
+      branch: result.meta.branch,
+      timestamp: result.meta.timestamp,
     },
     summary: {
-      status,
-      changedFiles: context.changedCount,
-      analyzedFiles: context.analyzedCount,
-      blockers: topN.blockers.length,
-      warnings: topN.warnings.length,
-      infos: topN.infos.length,
-      highestRisk: roundToOneDecimal(highestRisk),
-      confidence: roundToTwoDecimals(confidence),
-      exitCode: result.exitCode,
-      isLimited: topN.isLimited,
-      totalIssues: topN.totalCount,
-      shownIssues: topN.shownCount,
+      changedCount: result.summary.changedCount,
+      analyzedCount: result.summary.analyzedCount,
+      ignoredCount: result.summary.ignoredCount,
+      warningCount: result.summary.warningCount,
+      highestRisk: parseFloat(result.summary.highestRisk.toFixed(1)),
+      blockerCount: result.summary.blockerCount,
+      topN: topFiles.length,
     },
-    issues,
+    files: topFiles.map((file) => ({
+      path: file.path,
+      riskScore: parseFloat(file.riskScore.toFixed(1)),
+      severity: file.severity as any,
+      blastRadius: file.blastRadius,
+      signalTypes: file.signalTypes,
+      reasons: file.riskReasons,
+      evidence: file.evidence.map((ev) => ({
+        signal: ev.tag,
+        line: ev.line,
+        message: ev.message,
+        severity: ev.severity,
+      })),
+    })),
+    ignoredFiles: result.ignoredFiles,
+    warnings: result.warnings,
+    evaluation: result.evaluation
+      ? {
+          outcome: result.exitCode === 0 ? 'PASS' : 'FAIL',
+          blockers: result.evaluation.blockers.map((b) => ({
+            ruleId: b.ruleId,
+            message: `File riskScore >= threshold`,
+            file: b.file.path,
+          })),
+          warnings: result.evaluation.warnings.map((w) => ({
+            ruleId: w.ruleId,
+            message: `File riskScore in warning range`,
+            file: w.file.path,
+          })),
+        }
+      : null,
   };
 
-  return config.pretty !== false ? JSON.stringify(output, null, 2) : JSON.stringify(output);
-}
-
-function formatJsonIssue(
-  issue: RuleResult,
-  rank: number,
-  severity: 'blocker' | 'warning' | 'info',
-): JsonIssue {
-  return {
-    rank,
-    severity,
-    ruleId: issue.ruleId,
-    file: {
-      path: issue.file.path,
-      riskScore: roundToOneDecimal(issue.file.riskScore),
-      blastRadius: issue.file.blastRadius,
-    },
-    reasons: issue.file.riskReasons.slice(0, 5),
-    evidence: issue.file.evidence.slice(0, 5).map((e) => ({
-      line: e.line,
-      message: e.message,
-      severity: e.severity,
-      tag: e.tag,
-    })),
-    actions: issue.actions.slice(0, 3).map((a) => ({
-      type: a.type,
-      text: a.text,
-      command: 'command' in a ? (a as any).command : undefined,
-      reviewers: 'reviewers' in a ? (a as any).reviewers : undefined,
-    })),
-  };
-}
-
-function getSeverity(issue: RuleResult, topN: TopNResult): 'blocker' | 'warning' | 'info' {
-  if (topN.blockers.includes(issue)) return 'blocker';
-  if (topN.warnings.includes(issue)) return 'warning';
-  return 'info';
-}
-
-function getHighestRisk(topN: TopNResult): number {
-  const allIssues = [...topN.blockers, ...topN.warnings, ...topN.infos];
-  if (allIssues.length === 0) return 0;
-  return Math.max(...allIssues.map((i) => i.file.riskScore));
-}
-
-function calculateConfidence(topN: TopNResult): number {
-  const allIssues = [...topN.blockers, ...topN.warnings, ...topN.infos];
-  if (allIssues.length === 0) return 0;
-
-  const totalReasons = allIssues.reduce((sum, i) => sum + i.file.riskReasons.length, 0);
-  const avgReasons = totalReasons / allIssues.length;
-
-  return Math.min(0.3 + allIssues.length * 0.1 + avgReasons * 0.1, 1.0);
-}
-
-function roundToOneDecimal(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
-function roundToTwoDecimals(n: number): number {
-  return Math.round(n * 100) / 100;
+  return JSON.stringify(output, null, 2);
 }

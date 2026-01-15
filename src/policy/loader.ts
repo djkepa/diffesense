@@ -1,6 +1,8 @@
 /**
- * Config Loader
- * Loads and merges configuration from files and CLI
+ * Policy Rules Provider
+ *
+ * Provides baseline rules and profile rules for the policy engine.
+ *
  */
 
 import * as fs from 'fs';
@@ -13,7 +15,8 @@ export type { DiffeSenseConfig } from '../config/schema';
 import type { DiffeSenseConfig } from '../config/schema';
 
 /**
- * Load configuration from file
+ * @deprecated Use `resolveConfig` from '../config' instead.
+ * This function is kept for backwards compatibility.
  */
 export function loadConfig(
   configPath?: string,
@@ -47,23 +50,16 @@ export function loadConfig(
   return config;
 }
 
-/**
- * Load config from a specific file
- */
 function loadConfigFileLocal(filePath: string): Partial<DiffeSenseConfig> {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const parsed = yaml.load(content) as Partial<DiffeSenseConfig>;
     return parsed || {};
-  } catch (error) {
-    console.warn(`Warning: Could not parse config file ${filePath}`);
+  } catch {
     return {};
   }
 }
 
-/**
- * Merge configs (later values override earlier)
- */
 function mergeConfig(
   base: Partial<DiffeSenseConfig>,
   override: Partial<DiffeSenseConfig>,
@@ -191,7 +187,10 @@ export function validateConfig(configPath: string): { valid: boolean; errors: st
       errors.push(`Unsupported config version: ${config.version}`);
     }
 
-    if (config.profile && !['minimal', 'strict', 'react', 'backend'].includes(config.profile)) {
+    if (
+      config.profile &&
+      !['minimal', 'strict', 'react', 'vue', 'angular', 'backend'].includes(config.profile)
+    ) {
       errors.push(`Unknown profile: ${config.profile}`);
     }
 

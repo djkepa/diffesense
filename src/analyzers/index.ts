@@ -56,6 +56,8 @@ export interface AnalyzeOptions {
   changedFileDetails?: ChangedFileDetail[];
   contextLines?: number;
   useClassBasedScoring?: boolean;
+  includeTests?: boolean;
+  includeConfig?: boolean;
 }
 
 export async function analyzeProject(options: AnalyzeOptions): Promise<ProjectAnalysis> {
@@ -227,15 +229,22 @@ function extractImports(content: string): string[] {
 
 function findSourceFiles(rootPath: string, options: AnalyzeOptions): string[] {
   const files: string[] = [];
-  const excludePatterns = options.excludePatterns || [
+  let excludePatterns = options.excludePatterns || [
     'node_modules',
     'dist',
     'build',
     '.git',
     'coverage',
-    '__tests__',
-    '__mocks__',
   ];
+
+  if (!options.includeTests) {
+    excludePatterns = [...excludePatterns, '__tests__', '__mocks__'];
+  }
+
+  const fileOptions: AnalyzableFileOptions = {
+    includeTests: options.includeTests,
+    includeConfig: options.includeConfig,
+  };
 
   function walk(dir: string): void {
     try {
@@ -249,7 +258,7 @@ function findSourceFiles(rootPath: string, options: AnalyzeOptions): string[] {
 
         if (entry.isDirectory()) {
           walk(fullPath);
-        } else if (entry.isFile() && isAnalyzableFile(entry.name)) {
+        } else if (entry.isFile() && isAnalyzableFile(entry.name, fileOptions)) {
           files.push(relativePath);
         }
       }
@@ -260,7 +269,12 @@ function findSourceFiles(rootPath: string, options: AnalyzeOptions): string[] {
   return files;
 }
 
-function isAnalyzableFile(fileName: string): boolean {
+interface AnalyzableFileOptions {
+  includeTests?: boolean;
+  includeConfig?: boolean;
+}
+
+function isAnalyzableFile(fileName: string, options: AnalyzableFileOptions = {}): boolean {
   const ext = path.extname(fileName).toLowerCase();
   const validExts = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 
@@ -268,10 +282,20 @@ function isAnalyzableFile(fileName: string): boolean {
 
   const lower = fileName.toLowerCase();
 
-  if (lower.includes('.test.') || lower.includes('.spec.')) return false;
-
   if (lower.startsWith('.')) return false;
-  if (lower.includes('config')) return false;
+
+  if (!options.includeTests) {
+    if (lower.includes('.test.') || lower.includes('.spec.')) return false;
+  }
+
+  if (!options.includeConfig) {
+    if (
+      lower.match(/^config\.(js|ts|mjs|cjs)$/) ||
+      lower.match(/\.(config|rc)\.(js|ts|mjs|cjs|json|yml|yaml)$/)
+    ) {
+      return false;
+    }
+  }
 
   return true;
 }

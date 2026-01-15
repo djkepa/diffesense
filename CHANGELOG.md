@@ -5,6 +5,48 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-01-15
+
+### Added
+
+#### Stable Programmatic API
+- **`analyze()` function** - Pure, testable core API with structured result
+- **Severity classification** - CRITICAL/HIGH/MED/LOW risk levels
+- **Transparent tracking** - `ignoredFiles[]` with reasons, `warnings[]` collection
+- **JSON schema v1.0.0** - Versioned contract in `docs/api-schema.json`
+
+#### Professional Output Formats
+- **Console** - Clean header, summary table, severity badges, deterministic sorting
+- **Markdown** - GitHub/GitLab PR comments with collapsible sections, emoji badges
+- **JSON** - Enterprise-grade with `schemaVersion`, `toolVersion`, `status` field
+
+#### Testing & Reliability
+- **226 tests** (12 new E2E integration tests)
+- **Contract tests** - JSON schema validation, exit code mapping
+- **E2E fixtures** - Real git repo scenarios (rename, config filtering, include flags)
+
+#### Version Management
+- **Centralized version** - `src/version.ts` as single source of truth
+- **Build-time check** - Automated sync verification in `npm run build`
+- **npm version hooks** - Auto-test and git push on version bump
+
+### Changed
+- **CLI refactored** - Now thin wrapper around `analyze()` (one pipeline, not two)
+- **Exit codes clarified** - 0=PASS, 1=FAIL, 2=ERROR (no WARN status)
+- **Formatters unified** - All accept `AnalysisResult` directly
+- **Docs updated** - QUICK_START, OUTPUT_FORMATS, PUBLIC_CONTRACT synced
+
+### Fixed
+- **Duplicate warnings** - Removed double console output in CLI
+- **Exit/status mapping** - Markdown now correctly shows FAIL for exit 1
+- **Config file filter** - Already precise (regex-based, not substring)
+- **Rename parsing** - Already correct (R100/C100 use new path)
+
+### Documentation
+- **Programmatic API** - README section with examples and contract table
+- **API schema** - Formal JSON schema with severity enum
+- **Output examples** - Professional snapshots for all formats
+
 ## [1.0.1] - 2026-01-09
 
 ### Changed
