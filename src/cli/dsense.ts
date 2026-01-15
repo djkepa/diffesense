@@ -10,6 +10,8 @@ import {
   autoDetectScope,
   hasStagedChanges,
   hasWorkingChanges,
+  getGitRoot,
+  getRelativePathFromGitRoot,
 } from '../git/diff';
 import { analyze } from '../core/analyze';
 import { formatConsoleOutput } from '../output/formatters/dsConsole';
@@ -882,7 +884,20 @@ Try:
         msg = 'No source files changed';
       }
     } else {
-      msg = 'No analyzable files found';
+      const relativePath = getRelativePathFromGitRoot(cwd);
+      if (relativePath) {
+        const gitRoot = getGitRoot(cwd);
+        msg = `No analyzable files found
+
+${chalk.yellow('Note:')} You are running from a subdirectory: ${chalk.cyan(relativePath)}
+Git diff paths are relative to repo root: ${chalk.dim(gitRoot || '')}
+
+${chalk.yellow('Tip:')} Run DiffeSense from the git root directory:
+  ${chalk.cyan(`cd ${gitRoot}`)}
+  ${chalk.cyan('dsense')}`;
+      } else {
+        msg = 'No analyzable files found';
+      }
     }
     return {
       output: quiet ? '' : msg,

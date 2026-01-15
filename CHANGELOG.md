@@ -5,6 +5,121 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-15
+
+### 🚀 Enterprise Edition - Full Ecosystem Coverage
+
+This release transforms DiffeSense into a comprehensive change-risk intelligence platform covering **all major JavaScript/TypeScript ecosystems**.
+
+### Added
+
+#### New Detector Profiles
+- **Svelte/SvelteKit** - Reactivity, stores, lifecycle, load functions, form actions
+- **SSR/Isomorphic** - Next.js (App/Pages Router), Nuxt, Astro, hydration issues, env leakage
+- **React Native/Expo** - Native modules, platform-specific code, navigation, performance
+- **Electron/Tauri** - IPC security, context isolation, window management, native APIs
+
+#### Expanded Node.js Detection
+- **GraphQL** - Schema changes, resolvers, DataLoader, Apollo Server, directives
+- **Realtime** - WebSocket server, Socket.io, SSE, PubSub, backpressure handling
+- **BFF patterns** - API routes, middleware chains, database operations
+
+#### Signal Descriptions (150+ signals)
+- **New SSR signals**: `ssr-browser-api`, `ssr-hydration-date`, `ssr-env-leakage`, etc.
+- **Svelte signals**: `svelte-reactive-side-effect`, `sveltekit-load`, `sveltekit-actions`
+- **Mobile signals**: `rn-native-module`, `rn-flatlist-no-key`, `expo-camera`, `expo-location`
+- **Desktop signals**: `electron-context-bridge`, `electron-node-integration`, `tauri-command`
+- **GraphQL signals**: `graphql-mutation`, `graphql-dataloader`, `graphql-security`
+- **Realtime signals**: `realtime-websocket-server`, `realtime-sse`, `realtime-backpressure`
+
+### Changed
+
+#### Auto-Detection (Enhanced)
+- Smarter framework detection based on file patterns and imports
+- Priority order: Desktop → Mobile → SSR → Framework → Node → Generic
+- New `getDetectorProfileName()` for display purposes
+- `getAvailableProfiles()` and `getProfileDescription()` helpers
+
+#### CLI
+- `--detector` flag now accepts: `svelte`, `ssr`, `react-native`, `electron` (in addition to existing)
+
+### Coverage Matrix
+
+| Ecosystem | Frameworks | Key Signals |
+|-----------|-----------|-------------|
+| Frontend SPA | React, Vue, Angular, Svelte | hooks, reactivity, lifecycle |
+| SSR/Isomorphic | Next.js, Nuxt, SvelteKit, Astro | hydration, env leakage, server components |
+| Backend | Express, Nest, Fastify | routes, middleware, auth |
+| GraphQL | Apollo, type-graphql | schema, resolvers, N+1 |
+| Realtime | WebSocket, Socket.io, SSE | connections, backpressure |
+| Mobile | React Native, Expo | native modules, navigation |
+| Desktop | Electron, Tauri | IPC, security, context isolation |
+
+---
+
+## [1.2.2] - 2026-01-15
+
+### Added
+
+#### Human-Readable Signal Descriptions (Enterprise-Grade)
+- **Signal descriptions map** - 50+ signals now have human-readable titles, summaries, impact descriptions, and recommendations
+- **Hybrid output format** - Default shows readable titles, `--details` shows technical IDs with explanations
+- **Enriched JSON output** - New `signals[]` array with full metadata for CI/CD integrations
+
+### Changed
+
+#### Console Output
+- **Default format** - Now shows human-readable signal names:
+  - Before: `→ Behavioral: process-child, fs-sync (+3.0)`
+  - After: `→ Behavioral: Spawns child processes  •  Sync file I/O  •  Export signature changed`
+- **Details format** - Shows signal ID + explanation:
+  - `→ Spawns child processes (process-child) → Code executes external commands or scripts`
+
+#### Markdown Output
+- **PR comments** - Human-readable signal titles in summary
+- **Action Required section** - Detailed breakdown with full explanations
+
+#### JSON Output
+- **New `signals` field** per file with enriched data:
+  ```json
+  {
+    "id": "fs-sync",
+    "category": "behavioral",
+    "title": "Sync file I/O",
+    "summary": "Synchronous file operations block event loop",
+    "impact": "Server hangs during I/O, poor performance",
+    "recommendation": "Use async fs/promises API instead"
+  }
+  ```
+
+### Why This Matters
+- **Junior developers** can now understand what signals mean without documentation lookup
+- **PM/QA** can read PR comments and understand risks
+- **Senior developers** still have access to technical IDs in `--details` and JSON
+- **CI/CD systems** can use enriched JSON for custom dashboards and alerts
+
+---
+
+## [1.2.1] - 2026-01-15
+
+### Added
+- **Clickable file paths** - Absolute paths in console output that can be clicked in most terminals to open files
+- **Full risk reasons** - No more truncated "Why" column, all reasons are now displayed
+- **Color-coded severity badges** - CRITICAL (red), HIGH (yellow), MED (cyan), LOW (gray) with background colors
+- **Colored risk icons** - Red, yellow, blue dots for different risk categories (security, behavioral, style)
+- **Improved "What You Should Do" section** - Clear actionable steps when high-risk files are detected
+
+### Improved
+- **Console output** - Professional layout with clear sections, dividers, and better visual hierarchy
+- **Markdown output** - Enhanced PR comments with "What You Need To Do" section listing all risk reasons per file
+- **Monorepo subdirectory detection** - Shows helpful message with git root path when running from subdirectory
+
+### Changed
+- **Output format** - Files now show full paths with severity badge, risk score, and all reasons on separate lines
+- **Summary section** - Cleaner table-like format with aligned values
+
+---
+
 ## [1.2.0] - 2026-01-15
 
 ### Added

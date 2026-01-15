@@ -269,6 +269,32 @@ export function isGitRepo(cwd: string = process.cwd()): boolean {
   return result.status === 0;
 }
 
+export function getGitRoot(cwd: string = process.cwd()): string | null {
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+    encoding: 'utf-8',
+    cwd,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  if (result.status === 0 && result.stdout) {
+    return result.stdout.trim();
+  }
+  return null;
+}
+
+export function getRelativePathFromGitRoot(cwd: string = process.cwd()): string | null {
+  const gitRoot = getGitRoot(cwd);
+  if (!gitRoot) return null;
+
+  const normalizedCwd = cwd.replace(/\\/g, '/');
+  const normalizedRoot = gitRoot.replace(/\\/g, '/');
+
+  if (normalizedCwd === normalizedRoot) return '';
+  if (normalizedCwd.startsWith(normalizedRoot + '/')) {
+    return normalizedCwd.slice(normalizedRoot.length + 1);
+  }
+  return null;
+}
+
 export function hasStagedChanges(cwd: string = process.cwd()): boolean {
   const result = spawnSync('git', ['diff', '--cached', '--name-only'], {
     encoding: 'utf-8',

@@ -1,6 +1,7 @@
 import { AnalysisResult } from '../../core/analyze';
 import { sortFilesBySeverity } from '../../core/severity';
 import { VERSION, SCHEMA_VERSION } from '../../version';
+import { getSignalDescription, parseRiskReason } from '../signalDescriptions';
 
 export interface JsonOutput {
   schemaVersion: string;
@@ -42,6 +43,15 @@ export interface JsonOutput {
   } | null;
 }
 
+export interface JsonSignal {
+  id: string;
+  category: 'security' | 'behavioral' | 'style';
+  title: string;
+  summary: string;
+  impact: string;
+  recommendation: string;
+}
+
 export interface JsonIssue {
   path: string;
   riskScore: number;
@@ -49,6 +59,8 @@ export interface JsonIssue {
   blastRadius: number;
   signalTypes: string[];
   reasons: string[];
+  /** Enriched signal descriptions for enterprise integrations */
+  signals: JsonSignal[];
   evidence: Array<{
     signal?: string;
     line?: number;
@@ -103,20 +115,37 @@ export function formatJsonOutput(
       blockerCount: result.summary.blockerCount,
       topN: topFiles.length,
     },
-    files: topFiles.map((file) => ({
-      path: file.path,
-      riskScore: parseFloat(file.riskScore.toFixed(1)),
-      severity: file.severity as any,
-      blastRadius: file.blastRadius,
-      signalTypes: file.signalTypes,
-      reasons: file.riskReasons,
-      evidence: file.evidence.map((ev) => ({
-        signal: ev.tag,
-        line: ev.line,
-        message: ev.message,
-        severity: ev.severity,
-      })),
-    })),
+    files: topFiles.map((file) => {
+      // Extract signal IDs from reasons and enrich with descriptions
+      const signalIds = extractSignalIds(file.riskReasons);
+      const enrichedSignals: JsonSignal[] = signalIds.map((id) => {
+        const desc = getSignalDescription(id);
+        return {
+          id,
+          category: desc.category,
+          title: desc.title,
+          summary: desc.summary,
+          impact: desc.impact,
+          recommendation: desc.recommendation,
+        };
+      });
+
+      return {
+        path: file.path,
+        riskScore: parseFloat(file.riskScore.toFixed(1)),
+        severity: file.severity as any,
+        blastRadius: file.blastRadius,
+        signalTypes: file.signalTypes,
+        reasons: file.riskReasons,
+        signals: enrichedSignals,
+        evidence: file.evidence.map((ev) => ({
+          signal: ev.tag,
+          line: ev.line,
+          message: ev.message,
+          severity: ev.severity,
+        })),
+      };
+    }),
     ignoredFiles: result.ignoredFiles,
     warnings: result.warnings,
     evaluation: result.evaluation
@@ -137,4 +166,25 @@ export function formatJsonOutput(
   };
 
   return JSON.stringify(output, null, 2);
+}
+
+/**
+ * Extract signal IDs from risk reasons
+ * Input format: "Category: signal1, signal2 (+score)"
+ */
+function extractSignalIds(reasons: string[]): string[] {
+  const ids: string[] = [];
+
+  for (const reason of reasons) {
+    const parsed = parseRiskReason(reason);
+    if (parsed) {
+      for (const signal of parsed.signals) {
+        if (!ids.includes(signal.id)) {
+          ids.push(signal.id);
+        }
+      }
+    }
+  }
+
+  return ids;
 }
