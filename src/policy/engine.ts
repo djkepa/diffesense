@@ -62,6 +62,7 @@ export interface Evidence {
 export interface AnalyzedFile {
   path: string;
   riskScore: number;
+  gatedRiskScore?: number;
   blastRadius: number;
   evidence: Evidence[];
   riskReasons: string[];
@@ -103,6 +104,7 @@ export interface Exception {
  */
 export interface EvaluationOptions {
   actionMappings?: ActionMapping[];
+  useGatedScoring?: boolean;
 }
 
 /**
@@ -115,12 +117,13 @@ export function evaluateRules(
   options: EvaluationOptions = {},
 ): EvaluationResult {
   const results: RuleResult[] = [];
+  const useGatedScoring = options.useGatedScoring !== false;
 
   for (const file of files) {
     if (isExcepted(file.path, exceptions)) continue;
 
     for (const rule of rules) {
-      if (matchesConditions(file, rule.when)) {
+      if (matchesConditions(file, rule.when, useGatedScoring)) {
         const actions = rule.then.actions || generateActionsForFile(file, options.actionMappings);
 
         results.push({
@@ -150,9 +153,16 @@ export function evaluateRules(
 /**
  * Check if file matches rule conditions
  */
-function matchesConditions(file: AnalyzedFile, when: RuleCondition): boolean {
-  if (when.riskGte !== undefined && file.riskScore < when.riskGte) return false;
-  if (when.riskLte !== undefined && file.riskScore > when.riskLte) return false;
+function matchesConditions(
+  file: AnalyzedFile,
+  when: RuleCondition,
+  useGatedScoring: boolean = true,
+): boolean {
+  const effectiveRiskScore =
+    useGatedScoring && file.gatedRiskScore !== undefined ? file.gatedRiskScore : file.riskScore;
+
+  if (when.riskGte !== undefined && effectiveRiskScore < when.riskGte) return false;
+  if (when.riskLte !== undefined && effectiveRiskScore > when.riskLte) return false;
   if (when.blastRadiusGte !== undefined && file.blastRadius < when.blastRadiusGte) return false;
 
   if (when.signalTypes && when.signalTypes.length > 0 && file.signalTypes) {

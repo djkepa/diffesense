@@ -1,10 +1,63 @@
 # DiffeSense Quick Start Guide
 
-Get started with DiffeSense in 5 minutes.
+Get started with DiffeSense in minutes.
 
 ---
 
-## Installation
+## 2-Minute Adoption (Copy-Paste)
+
+### Local: Install and Run
+
+```bash
+npm install -g diffesense
+dsense
+```
+
+That's it. DiffeSense auto-detects your scope (staged → working → branch).
+
+### CI: Add to GitHub Actions
+
+Create `.github/workflows/diffesense.yml`:
+
+```yaml
+name: DiffeSense
+on: [pull_request]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install -g diffesense
+      - run: dsense --scope branch --base origin/main --format json > report.json
+      - run: dsense --scope branch --base origin/main
+```
+
+Done. PRs now get risk analysis.
+
+### GitLab CI
+
+Add to `.gitlab-ci.yml`:
+
+```yaml
+diffesense:
+  image: node:20
+  script:
+    - npm install -g diffesense
+    - dsense --scope branch --base origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+  only:
+    - merge_requests
+```
+
+---
+
+## Full Guide (5 Minutes)
+
+### Installation
 
 ```bash
 # Global (recommended)

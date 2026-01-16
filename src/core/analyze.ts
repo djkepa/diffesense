@@ -55,6 +55,7 @@ export interface AnalyzeOptions {
 export interface AnalyzedFileResult {
   path: string;
   riskScore: number;
+  gatedRiskScore: number;
   severity: RiskSeverity;
   blastRadius: number;
   evidence: Array<{
@@ -65,6 +66,12 @@ export interface AnalyzedFileResult {
   }>;
   riskReasons: string[];
   signalTypes: string[];
+  gateStats?: {
+    blocking: number;
+    advisory: number;
+    filtered: number;
+    total: number;
+  };
 }
 
 export interface IgnoredFile {
@@ -315,6 +322,7 @@ export async function analyze(options: AnalyzeOptions = {}): Promise<AnalysisRes
     files.push({
       path: file.path,
       riskScore: file.riskScore,
+      gatedRiskScore: file.gatedRiskScore,
       severity: getRiskSeverity(file.riskScore),
       blastRadius,
       evidence: file.evidence.map((e) => ({
@@ -325,6 +333,7 @@ export async function analyze(options: AnalyzeOptions = {}): Promise<AnalysisRes
       })),
       riskReasons: file.riskReasons,
       signalTypes: file.signalTypes,
+      gateStats: file.gateStats,
     });
   }
 
@@ -348,7 +357,9 @@ export async function analyze(options: AnalyzeOptions = {}): Promise<AnalysisRes
     });
   }
 
-  const evaluation = evaluateRules(files, rules, config.exceptions, {});
+  const evaluation = evaluateRules(files, rules, config.exceptions, {
+    useGatedScoring: true,
+  });
 
   const highestRisk = files.reduce((max, f) => Math.max(max, f.riskScore), 0);
 

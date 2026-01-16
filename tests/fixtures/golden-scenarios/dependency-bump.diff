@@ -1,0 +1,24 @@
+diff --git a/package.json b/package.json
+index abc1234..def5678 100644
+--- a/package.json
++++ b/package.json
+@@ -10,15 +10,15 @@
+   },
+   "dependencies": {
+     "express": "^4.18.2",
+-    "react": "^17.0.2",
+-    "react-dom": "^17.0.2",
++    "react": "^18.2.0",
++    "react-dom": "^18.2.0",
+     "typescript": "^5.0.0",
+-    "axios": "^0.27.2",
++    "axios": "^1.6.0",
+     "lodash": "^4.17.21"
+   },
+   "devDependencies": {
+     "@types/node": "^20.0.0",
+-    "jest": "^28.0.0",
++    "jest": "^29.7.0",
+     "eslint": "^8.50.0"
+   }
+ }

@@ -30,3 +30,6 @@ coverage/
 .diffesense.yml
 .diffesense.json
 
+# DiffeSense cache
+.diffesense/
+

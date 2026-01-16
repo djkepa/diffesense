@@ -55,11 +55,11 @@ export interface JsonSignal {
 export interface JsonIssue {
   path: string;
   riskScore: number;
+  gatedRiskScore: number;
   severity: 'LOW' | 'MED' | 'HIGH' | 'CRITICAL';
   blastRadius: number;
   signalTypes: string[];
   reasons: string[];
-  /** Enriched signal descriptions for enterprise integrations */
   signals: JsonSignal[];
   evidence: Array<{
     signal?: string;
@@ -67,6 +67,12 @@ export interface JsonIssue {
     message: string;
     severity: 'error' | 'warning' | 'info';
   }>;
+  gateStats?: {
+    blocking: number;
+    advisory: number;
+    filtered: number;
+    total: number;
+  };
 }
 
 /**
@@ -76,7 +82,7 @@ export function formatJsonOutput(
   result: AnalysisResult,
   config: { topN?: number; showAll?: boolean } = {},
 ): string {
-  const topN = config.topN || 3;
+  const topN = config.topN || 5;
   const sorted = sortFilesBySeverity(result.files);
   const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
 
@@ -133,6 +139,7 @@ export function formatJsonOutput(
       return {
         path: file.path,
         riskScore: parseFloat(file.riskScore.toFixed(1)),
+        gatedRiskScore: parseFloat(file.gatedRiskScore.toFixed(1)),
         severity: file.severity as any,
         blastRadius: file.blastRadius,
         signalTypes: file.signalTypes,
@@ -144,6 +151,7 @@ export function formatJsonOutput(
           message: ev.message,
           severity: ev.severity,
         })),
+        gateStats: file.gateStats,
       };
     }),
     ignoredFiles: result.ignoredFiles,

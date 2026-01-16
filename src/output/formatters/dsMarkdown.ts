@@ -42,7 +42,7 @@ export function formatMarkdownOutput(
   lines.push('');
 
   if (result.files.length > 0) {
-    const topN = config.topN || 3;
+    const topN = config.topN || 5;
     const sorted = sortFilesBySeverity(result.files);
     const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
 

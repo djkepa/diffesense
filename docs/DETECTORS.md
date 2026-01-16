@@ -421,8 +421,57 @@ All signals belong to one of these categories:
 
 ## Signal Confidence Levels
 
+DiffeSense assigns a confidence level to each signal to reduce noise and false positives.
+
 | Level | Meaning |
 |-------|---------|
 | `high` | Regex match with clear pattern |
 | `medium` | Heuristic with some false positives |
 | `low` | Best-effort detection, review recommended |
+
+### Confidence Gate
+
+**Blocking a merge requires BOTH high confidence AND high impact.** This prevents false positives from breaking your CI pipeline.
+
+| Confidence | Impact (Class) | Can Block Merge? | Shown in Default? | Shown in `--details`? |
+|------------|----------------|------------------|-------------------|----------------------|
+| `high` | critical/behavioral | ✅ Yes | ✅ Yes | ✅ Yes |
+| `high` | maintainability | ❌ No | ✅ Yes (advisory) | ✅ Yes |
+| `medium` | any | ❌ No | ✅ Yes (advisory) | ✅ Yes |
+| `low` | any | ❌ No | ❌ No | ✅ Yes |
+
+**Trust-First Approach:**
+
+Signals without explicit confidence default to `'low'`. This means unknown or legacy signals won't cause unexpected FAILs.
+
+**Default Confidence Assignment:**
+
+- `critical` class signals → `high` confidence
+- Security-related signals (auth, password, token, secret, sec-*) → `high` confidence
+- `behavioral` class signals → `medium` confidence  
+- `maintainability` class signals → `low` confidence
+
+**Example:**
+
+```
+# high confidence + high impact = BLOCKING
+sec-command-injection (critical class) → Can FAIL
+
+# high confidence + low impact = ADVISORY  
+large-file (maintainability class) → Advisory only
+
+# low confidence = FILTERED
+unknown-signal → Hidden in default output
+```
+
+**Viewing Gate Statistics:**
+
+The summary box shows how many signals were categorized:
+
+```
+Signals: 382 blocking, 4615 advisory, 131 filtered
+```
+
+- **blocking**: High-confidence + high-impact signals that can cause FAIL
+- **advisory**: Signals shown but won't cause FAIL
+- **filtered**: Low-confidence signals (hidden in default output)

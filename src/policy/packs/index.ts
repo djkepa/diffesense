@@ -72,7 +72,7 @@ export const enterprisePack: PolicyPack = {
     supplyChain: 1.2,
   },
   defaults: {
-    topN: 15,
+    topN: 5,
     details: true,
   },
 };
@@ -84,6 +84,7 @@ export const enterprisePack: PolicyPack = {
  * - FAIL only on CRITICAL or very high risk
  * - Less noise, faster adoption
  * - Maintainability weighted lower
+ * - TOP 5 to respect noise budget
  */
 export const startupPack: PolicyPack = {
   name: 'startup',
@@ -103,7 +104,7 @@ export const startupPack: PolicyPack = {
     supplyChain: 1.0,
   },
   defaults: {
-    topN: 10,
+    topN: 5,
     details: false,
   },
 };
@@ -115,6 +116,7 @@ export const startupPack: PolicyPack = {
  * - Doesn't block on style/maintainability
  * - Focus on security and supply-chain
  * - Maintainability weighted very low
+ * - TOP 5 to respect noise budget
  */
 export const ossPack: PolicyPack = {
   name: 'oss',
@@ -134,7 +136,7 @@ export const ossPack: PolicyPack = {
     supplyChain: 1.3,
   },
   defaults: {
-    topN: 12,
+    topN: 5,
     details: false,
   },
 };

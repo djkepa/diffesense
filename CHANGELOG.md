@@ -5,6 +5,33 @@ All notable changes to DiffeSense will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - Trust-First Release
+
+### Added
+- **Confidence Gate** - PASS/FAIL now depends on `gatedRiskScore` (high-confidence + high-impact only)
+- **Suppressions** - `dsense suppress add/remove/list/clean` with expiry, glob matching, security friction
+- **Cache** - File-based caching with stable config hashing (nested objects supported)
+- **Golden Scenarios** - 4 real-world test fixtures (format-only, rename, auth, deps)
+- **Output Snapshots** - Contract tests for console/JSON/markdown consistency
+
+### Changed
+- **topN=5** default across all policy packs (noise budget)
+- **Default confidence = low** (trust-first: unknown signals don't block)
+- Terminology: "blocking signals" → "high-impact signals" in CLI output
+- Suppression precedence: local > global, more specific glob wins
+
+### Fixed
+- Cache hash now handles nested config objects correctly (`stableStringifyDeep`)
+- `os.userInfo()` wrapped in try/catch for CI environments
+- Windows path normalization in suppression glob matching
+
+### Upgrade Notes
+- PASS/FAIL now uses `gatedRiskScore` (not raw `riskScore`)
+- Default confidence is conservative (`low`) - signals must prove they're high-confidence
+- TOP 5 by default; use `--details` or `--top N` for more
+
+---
+
 ## [1.5.1]  
 
 ### Changed

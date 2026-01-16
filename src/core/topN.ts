@@ -9,7 +9,7 @@ export interface TopNConfig {
 }
 
 export const DEFAULT_TOP_N_CONFIG: TopNConfig = {
-  limit: 3,
+  limit: 5, // Noise budget: MAX 5 by default
   showAll: false,
   minRisk: 0,
   groupBySeverity: true,

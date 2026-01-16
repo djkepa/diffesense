@@ -371,6 +371,107 @@ Checking test framework...
 
 ---
 
+### `suppress`
+
+Manage signal suppressions to reduce noise and handle known issues.
+
+**Syntax:**
+```bash
+dsense suppress <subcommand> [options]
+```
+
+**Subcommands:**
+
+#### `suppress add <signalId>`
+
+Add a new suppression for a signal.
+
+```bash
+# Suppress large-file signals for 7 days
+dsense suppress add large-file --reason "Generated code" --expires-in 7d
+
+# Suppress deep-nesting in a specific directory
+dsense suppress add deep-nesting --file "src/generated/**" --expires-in 30d
+
+# Security signals require a reason
+dsense suppress add sec-xss-innerHTML --reason "Sanitized with DOMPurify"
+```
+
+**Options:**
+- `-f, --file <glob>` - File glob pattern to limit suppression
+- `-r, --reason <text>` - Reason for suppression (required for security signals)
+- `-e, --expires-in <duration>` - Expiration duration (e.g., 7d, 30d, 2w)
+- `--scope <scope>` - Scope: `local` (default) or `global`
+- `--force` - Force update existing suppression
+
+**Security Signal Friction:**
+- Signals starting with `sec-`, `auth-`, `xss-`, etc. require a `--reason`
+- If no `--expires-in` is provided, security signals default to 30 days
+
+#### `suppress remove <signalId>`
+
+Remove an existing suppression.
+
+```bash
+dsense suppress remove large-file
+dsense suppress remove deep-nesting --file "src/generated/**"
+```
+
+#### `suppress list`
+
+List all active and expired suppressions.
+
+```bash
+dsense suppress list
+dsense suppress list --scope local
+dsense suppress list --scope global
+```
+
+#### `suppress clean`
+
+Remove expired suppressions.
+
+```bash
+dsense suppress clean
+dsense suppress clean --scope local
+```
+
+**Storage:**
+- **Local:** `.diffesense/suppressions.json` (gitignored)
+- **Global:** `~/.config/diffesense/suppressions.json`
+
+**Precedence rules:**
+- Local suppressions override global suppressions
+- More specific globs win over less specific ones
+- Order of application: global first, then local (local wins)
+
+**Duration formats:**
+- `7d` - 7 days
+- `2w` - 2 weeks
+- `1m` - 1 month (30 days)
+- `24h` - 24 hours
+
+**Glob semantics (minimatch):**
+File patterns follow [minimatch](https://github.com/isaacs/minimatch) semantics:
+- `src/generated/**` - all files under src/generated/
+- `**/*.test.ts` - all .test.ts files anywhere
+- `packages/*/src/**` - monorepo pattern
+- `**/*.config.{js,ts}` - config files with multiple extensions
+
+**Example workflow:**
+```bash
+# Suppress a known false positive
+dsense suppress add large-file --file "src/generated/**" --reason "Auto-generated" --expires-in 30d
+
+# Check what's suppressed
+dsense suppress list
+
+# After 30 days, clean up expired suppressions
+dsense suppress clean
+```
+
+---
+
 ## Options
 
 ### Scope Options
@@ -726,19 +827,19 @@ Risk  Sev       Blast  File                      Why (top reasons)
 
 #### `-n, --top <n>`
 
-Number of top issues to show.
+Number of top issues to show. The default is 5 to match the **Noise Budget** principle (MAX 5 items in TOP RISKS).
 
-**Default:** `3`
+**Default:** `5` (or policy pack default if using `--policy-pack`)
 
 **Examples:**
 ```bash
-# Show top 3 (default)
-dsense --top 3
-
-# Show top 5
+# Show top 5 (default)
 dsense --top 5
 
-# Show top 10
+# Show top 3 for minimal output
+dsense --top 3
+
+# Show top 10 for more context
 dsense -n 10
 ```
 
@@ -1007,9 +1108,9 @@ dsense --explain-ignore
 
 #### `--details`
 
-Show detailed analysis with evidence and risk breakdown.
+Show detailed analysis with evidence and risk breakdown. In detailed mode, **all files** are shown (not limited by `--top`).
 
-**Default:** Compact output (decision + why sentence)
+**Default:** Compact output (TOP 5 files with decision + why)
 
 **Examples:**
 ```bash
@@ -1024,13 +1125,15 @@ dsense --details --format markdown
 ```
 
 **Detailed Output Includes:**
-- Risk breakdown (behavioral, maintainability, critical)
-- Evidence (top 3 signals with line numbers and tags)
+- **Signal Summary** (high-impact, advisory, filtered counts)
+- **Both risk scores**: Raw risk score + Gated score (used for PASS/FAIL)
+- Per-file signal breakdown with confidence gate stats
+- Evidence (all signals with line numbers)
+- Risk breakdown (critical, behavioral, maintainability)
 - Blast radius and changed lines
-- Confidence scores
 - Full action recommendations
 
-**Use Case:** When you need to understand **why** a file is flagged and **what** specific signals were detected.
+**Use Case:** When you need to understand **why** a file is flagged, **what** specific signals were detected, and **how** the confidence gate is filtering noise.
 
 **Output:**
 ```

@@ -25,7 +25,17 @@ import {
   getAvailablePolicyPacks,
   getPolicyPack,
 } from '../policy/packs';
-import { applyPolicyPack, formatPolicyPackInfo } from '../policy/packs/loader';
+import { applyPolicyPack } from '../policy/packs/loader';
+import { createCache, buildCacheKeyComponents } from '../cache';
+import {
+  addSuppression,
+  removeSuppression,
+  listSuppressions,
+  cleanExpiredSuppressions,
+  getSuppressionsHash,
+  isExpired,
+  SuppressionScope,
+} from '../core/suppressions';
 
 const program = new Command();
 
@@ -50,7 +60,7 @@ program
   .option('-f, --format <type>', 'Output format: console|markdown|json', 'console')
   .option('-c, --config <path>', 'Path to config file')
   .option('-t, --threshold <n>', 'Override fail threshold (0-10)', parseFloat)
-  .option('-n, --top <n>', 'Show top N issues (default: 3)', parseInt)
+  .option('-n, --top <n>', 'Show top N issues (default: 5)', parseInt)
   .option('--show-all', 'Show all issues (not just top N)')
   .option('--no-blast-radius', 'Skip blast radius calculation (faster)')
   .option('-q, --quiet', 'Only output on issues')
@@ -63,6 +73,9 @@ program
   .option('--determinism-check', 'Output input/output hashes for determinism verification')
   .option('--explain-ignore', 'Explain why files are ignored')
   .option('--details', 'Show detailed analysis with evidence and breakdown')
+  .option('--cache', 'Enable result caching (default: true)')
+  .option('--no-cache', 'Disable result caching')
+  .option('--clear-cache', 'Clear cache before running')
   .action(async (options) => {
     try {
       await runAnalysis(options);
@@ -92,7 +105,6 @@ program
     const policyPack = options.pack || 'startup';
 
     if (options.json) {
-      // Generate JSON config
       const jsonConfig = {
         $schema: 'https://diffesense.dev/schemas/config-1.0.json',
         policyPack,
@@ -113,7 +125,6 @@ program
       fs.writeFileSync(configPath, JSON.stringify(jsonConfig, null, 2));
       console.log(chalk.green(`✓ Created .diffesense.json with policy pack: ${policyPack}`));
     } else {
-      // Generate YAML config
       const configContent = `# DiffeSense Configuration
 # Framework-agnostic JavaScript/TypeScript change-risk engine
 version: 1
@@ -252,6 +263,49 @@ program
     runDoctor();
   });
 
+const cacheCmd = program.command('cache').description('Cache management commands');
+
+cacheCmd
+  .command('stats')
+  .description('Show cache statistics')
+  .action(() => {
+    const cache = createCache(process.cwd());
+    const stats = cache.getStats();
+
+    console.log(chalk.bold('Cache Statistics'));
+    console.log('================\n');
+    console.log(`  Entries:    ${stats.entries}`);
+    console.log(`  Size:       ${formatBytes(stats.sizeBytes)}`);
+    console.log(`  Cache dir:  ${cache.getCacheDir()}`);
+    console.log(`  Enabled:    ${cache.isEnabled() ? 'Yes' : 'No'}`);
+  });
+
+cacheCmd
+  .command('clear')
+  .description('Clear all cache entries')
+  .action(() => {
+    const cache = createCache(process.cwd());
+    const cleared = cache.clear();
+    console.log(chalk.green(`✓ Cleared ${cleared} cache entries`));
+  });
+
+cacheCmd
+  .command('cleanup')
+  .description('Remove expired cache entries')
+  .action(() => {
+    const cache = createCache(process.cwd());
+    const removed = cache.cleanup();
+    console.log(chalk.green(`✓ Removed ${removed} expired entries`));
+  });
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 program
   .command('packs')
   .description('List available policy packs')
@@ -303,6 +357,129 @@ program
     console.log(chalk.dim('Usage:'));
     console.log(chalk.cyan('  dsense --policy-pack enterprise'));
     console.log(chalk.cyan('  dsense init --pack oss'));
+  });
+
+const suppressCmd = program.command('suppress').description('Manage signal suppressions');
+
+suppressCmd
+  .command('add <signalId>')
+  .description('Suppress a signal (e.g., "dsense suppress add sec-xss-innerHTML")')
+  .option('-f, --file <glob>', 'File glob pattern to limit suppression')
+  .option('-r, --reason <text>', 'Reason for suppression (required for security signals)')
+  .option('-e, --expires-in <duration>', 'Expiration duration (e.g., 7d, 30d, 2w)')
+  .option('--scope <scope>', 'Scope: local (default) or global', 'local')
+  .option('--force', 'Force update existing suppression')
+  .action((signalId: string, options) => {
+    const cwd = process.cwd();
+    const result = addSuppression(cwd, {
+      signalId,
+      fileGlob: options.file,
+      reason: options.reason,
+      expiresIn: options.expiresIn,
+      scope: options.scope as SuppressionScope,
+      force: options.force,
+    });
+
+    if (result.success) {
+      console.log(chalk.green('✓ ' + result.message));
+    } else {
+      console.log(chalk.red('✗ ' + result.message));
+      process.exit(1);
+    }
+  });
+
+suppressCmd
+  .command('remove <signalId>')
+  .description('Remove a suppression')
+  .option('-f, --file <glob>', 'File glob pattern')
+  .option('--scope <scope>', 'Scope: local (default) or global', 'local')
+  .action((signalId: string, options) => {
+    const cwd = process.cwd();
+    const result = removeSuppression(cwd, {
+      signalId,
+      fileGlob: options.file,
+      scope: options.scope as SuppressionScope,
+    });
+
+    if (result.success) {
+      console.log(chalk.green('✓ ' + result.message));
+    } else {
+      console.log(chalk.red('✗ ' + result.message));
+      process.exit(1);
+    }
+  });
+
+suppressCmd
+  .command('list')
+  .description('List all suppressions')
+  .option('--scope <scope>', 'Filter by scope: local or global')
+  .action((options) => {
+    const cwd = process.cwd();
+    const { local, global, expired } = listSuppressions(
+      cwd,
+      options.scope as SuppressionScope | undefined,
+    );
+
+    console.log(chalk.bold('Suppressions'));
+    console.log('============\n');
+
+    if (local.length > 0) {
+      console.log(chalk.cyan.bold('Local (.diffesense/suppressions.json)'));
+      for (const entry of local) {
+        const expiredTag = isExpired(entry) ? chalk.red(' [EXPIRED]') : '';
+        const expiresInfo = entry.expiresAt
+          ? chalk.dim(` (expires: ${new Date(entry.expiresAt).toLocaleDateString()})`)
+          : chalk.dim(' (no expiration)');
+
+        console.log(`  ${chalk.white(entry.signalId)}${expiredTag}${expiresInfo}`);
+        if (entry.fileGlob) {
+          console.log(chalk.dim(`    File: ${entry.fileGlob}`));
+        }
+        if (entry.reason) {
+          console.log(chalk.dim(`    Reason: ${entry.reason}`));
+        }
+      }
+      console.log('');
+    }
+
+    if (global.length > 0) {
+      console.log(chalk.cyan.bold('Global (~/.config/diffesense/suppressions.json)'));
+      for (const entry of global) {
+        const expiredTag = isExpired(entry) ? chalk.red(' [EXPIRED]') : '';
+        const expiresInfo = entry.expiresAt
+          ? chalk.dim(` (expires: ${new Date(entry.expiresAt).toLocaleDateString()})`)
+          : chalk.dim(' (no expiration)');
+
+        console.log(`  ${chalk.white(entry.signalId)}${expiredTag}${expiresInfo}`);
+        if (entry.fileGlob) {
+          console.log(chalk.dim(`    File: ${entry.fileGlob}`));
+        }
+        if (entry.reason) {
+          console.log(chalk.dim(`    Reason: ${entry.reason}`));
+        }
+      }
+      console.log('');
+    }
+
+    if (local.length === 0 && global.length === 0) {
+      console.log(chalk.dim('No suppressions configured.'));
+      console.log('');
+    }
+
+    if (expired.length > 0) {
+      console.log(chalk.yellow(`${expired.length} expired suppression(s) found.`));
+      console.log(chalk.dim('Run "dsense suppress clean" to remove them.'));
+    }
+  });
+
+suppressCmd
+  .command('clean')
+  .description('Remove expired suppressions')
+  .option('--scope <scope>', 'Scope: local, global, or both (default)')
+  .action((options) => {
+    const cwd = process.cwd();
+    const result = cleanExpiredSuppressions(cwd, options.scope as SuppressionScope | undefined);
+    console.log(chalk.green('✓ ' + result.message));
   });
 
 program.parse();
@@ -514,8 +691,8 @@ scope:
 #   fail: 7.0
 #   warn: 5.0
 
-# Top N issues to show (default: 3)
-# topN: 3
+# Top N issues to show (default: 5)
+# topN: 5
 
 # Ignore patterns (extend defaults)
 # ignore:
@@ -658,8 +835,8 @@ jobs:
           dsense --base \${{ github.event.pull_request.base.ref }} --policy-pack enterprise --format json > report.json || true
           dsense --base \${{ github.event.pull_request.base.ref }} --policy-pack enterprise --format markdown --details > report.md || true
 
-          EXIT_CODE=\$(cat report.json | jq -r '.summary.exitCode // 0')
-          RISK=\$(cat report.json | jq -r '.summary.highestRisk // 0')
+          EXIT_CODE=\$(cat report.json | jq -r '.summary.exitCode 
+          RISK=\$(cat report.json | jq -r '.summary.highestRisk 
           echo "exit_code=\$EXIT_CODE" >> \$GITHUB_OUTPUT
           echo "risk=\$RISK" >> \$GITHUB_OUTPUT
 
@@ -787,7 +964,7 @@ diffesense:
     - dsense --base $CI_MERGE_REQUEST_TARGET_BRANCH_NAME --format markdown > report.md || true
     - cat report.md
     - |
-      EXIT_CODE=$(cat report.json | jq -r '.summary.exitCode // 0')
+      EXIT_CODE=$(cat report.json | jq -r '.summary.exitCode 
       if [ "$EXIT_CODE" = "1" ]; then
         echo "High-risk changes detected"
       fi
@@ -846,6 +1023,8 @@ interface CLIAnalysisOptions {
   determinismCheck?: boolean;
   explainIgnore?: boolean;
   details?: boolean;
+  cache?: boolean;
+  clearCache?: boolean;
 }
 
 /**
@@ -872,6 +1051,16 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
   const quiet = options.quiet || false;
   const determinismCheck = options.determinismCheck || false;
   const explainIgnoreFlag = options.explainIgnore || false;
+  const useCache = options.cache !== false;
+
+  const cache = createCache(cwd, { enabled: useCache });
+
+  if (options.clearCache) {
+    const cleared = cache.clear();
+    if (!quiet) {
+      console.log(chalk.dim(`Cleared ${cleared} cache entries`));
+    }
+  }
 
   const policyPackName = options.policyPack as PolicyPackName | undefined;
   const { pack: activePack, effectiveConfig } = applyPolicyPack(policyPackName);
@@ -934,24 +1123,62 @@ async function performAnalysis(options: CLIAnalysisOptions): Promise<CliAnalysis
 
   const effectiveThreshold = options.threshold ?? effectiveConfig.failThreshold;
 
-  const result = await analyze({
+  const suppressionsHash = getSuppressionsHash(cwd);
+
+  const cacheKeyComponents = buildCacheKeyComponents({
     cwd,
     scope: resolvedScope,
-    base: options.base,
-    commit: options.commit,
-    range: options.range,
-    profile: options.profile,
-    detector: options.detector as DetectorProfile,
-    configPath: options.config,
-    threshold: effectiveThreshold,
-    includeTests: options.includeTests,
-    includeConfig: options.includeConfig,
-    contextLines: options.context,
-    skipBlastRadius: options.blastRadius === false,
-    fullFileAnalysis: options.diffFocus === false,
-    classBasedScoring: options.classScoring,
-    analyzeAll: options.all,
+    base: options.base || 'main',
+    toolVersion: VERSION,
+    config: {
+      profile: options.profile,
+      detector: options.detector,
+      threshold: effectiveThreshold,
+      policyPack: policyPackName,
+      includeTests: options.includeTests,
+      includeConfig: options.includeConfig,
+      skipBlastRadius: options.blastRadius === false,
+      analyzeAll: options.all,
+    },
+    suppressionsHash,
   });
+
+  const startTime = Date.now();
+  const cached = cache.get<import('../core/analyze').AnalysisResult>(cacheKeyComponents);
+
+  let result: import('../core/analyze').AnalysisResult;
+
+  if (cached) {
+    result = cached.data;
+    if (!quiet) {
+      const savedTime = cached.computeTimeMs - (Date.now() - startTime);
+      console.log(chalk.dim(`Using cached result (saved ~${Math.max(0, savedTime)}ms)`));
+    }
+  } else {
+    result = await analyze({
+      cwd,
+      scope: resolvedScope,
+      base: options.base,
+      commit: options.commit,
+      range: options.range,
+      profile: options.profile,
+      detector: options.detector as DetectorProfile,
+      configPath: options.config,
+      threshold: effectiveThreshold,
+      includeTests: options.includeTests,
+      includeConfig: options.includeConfig,
+      contextLines: options.context,
+      skipBlastRadius: options.blastRadius === false,
+      fullFileAnalysis: options.diffFocus === false,
+      classBasedScoring: options.classScoring,
+      analyzeAll: options.all,
+    });
+
+    if (result.success && useCache) {
+      const computeTimeMs = Date.now() - startTime;
+      cache.set(cacheKeyComponents, result, computeTimeMs);
+    }
+  }
 
   if (!result.success) {
     return {

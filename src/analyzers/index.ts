@@ -8,12 +8,20 @@ import {
   getReasonChain,
   RiskScoreBreakdown,
 } from '../core/signalClasses';
+import {
+  applyConfidenceGate,
+  assignDefaultConfidenceAll,
+  GatedSignals,
+  GateStats,
+} from '../core/confidenceGate';
 
 export interface AnalyzedFile {
   path: string;
   riskScore: number;
+  gatedRiskScore: number;
   blastRadius: number;
   signals: Signal[];
+  gatedSignals: GatedSignals;
   summary: SignalSummary;
   evidence: Evidence[];
   riskReasons: string[];
@@ -23,6 +31,7 @@ export interface AnalyzedFile {
   isDiffAnalysis?: boolean;
   signalTypes: string[];
   riskBreakdown?: RiskScoreBreakdown;
+  gateStats: GateStats;
 }
 
 export interface Evidence {
@@ -98,9 +107,16 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<ProjectAn
         contextLines,
       };
 
-      const signals = detectSignals(content, relativePath, detectorProfile, detectorOptions);
+      const rawSignals = detectSignals(content, relativePath, detectorProfile, detectorOptions);
+
+      const signalsWithConfidence = assignDefaultConfidenceAll(rawSignals);
+
+      const gatedSignals = applyConfidenceGate(signalsWithConfidence);
+
+      const signals = gatedSignals.all;
 
       let riskScore: number;
+      let gatedRiskScore: number;
       let riskBreakdown: RiskScoreBreakdown | undefined;
       let riskReasons: string[];
 
@@ -109,10 +125,17 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<ProjectAn
         riskBreakdown = calculateClassBasedRiskScore(classified);
         riskScore = riskBreakdown.total;
         riskReasons = getReasonChain(classified, riskBreakdown);
+
+        const gatedClassified = classifySignals(gatedSignals.blocking);
+        const gatedBreakdown = calculateClassBasedRiskScore(gatedClassified);
+        gatedRiskScore = gatedBreakdown.total;
       } else {
         const totalWeight = signals.reduce((sum, s) => sum + s.weight, 0);
         riskScore = Math.min(totalWeight * 2, 10);
         riskReasons = generateRiskReasons(signals);
+
+        const gatedWeight = gatedSignals.blocking.reduce((sum, s) => sum + s.weight, 0);
+        gatedRiskScore = Math.min(gatedWeight * 2, 10);
       }
 
       const summary = summarizeSignals(signals);
@@ -135,8 +158,10 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<ProjectAn
       analyzedFiles.push({
         path: relativePath,
         riskScore,
+        gatedRiskScore,
         blastRadius: 0,
         signals,
+        gatedSignals,
         summary,
         evidence,
         riskReasons,
@@ -145,6 +170,7 @@ export async function analyzeProject(options: AnalyzeOptions): Promise<ProjectAn
         changedLines,
         isDiffAnalysis: changedRanges !== undefined,
         signalTypes,
+        gateStats: gatedSignals.stats,
         riskBreakdown,
       });
 

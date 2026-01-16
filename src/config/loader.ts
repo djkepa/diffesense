@@ -263,7 +263,7 @@ export function printConfigSummary(config: DiffeSenseConfig, source: string): st
   }
 
   if (config.output?.topN || config.topN) {
-    lines.push(`Top N: ${config.output?.topN || config.topN || 3}`);
+    lines.push(`Top N: ${config.output?.topN || config.topN || 5}`);
   }
 
   const ignorePatterns = Array.isArray(config.ignore)

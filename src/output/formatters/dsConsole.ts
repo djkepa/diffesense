@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import * as path from 'path';
 import { AnalysisResult } from '../../core/analyze';
 import { getRiskSeverity, getSeverityColor, sortFilesBySeverity } from '../../core/severity';
+import { getActiveSuppressions } from '../../core/suppressions';
 import { VERSION } from '../../version';
 import {
   parseRiskReason,
@@ -70,9 +71,14 @@ function formatDefaultOutput(result: AnalysisResult, config: ConsoleOutputConfig
   lines.push('');
 
   if (result.files.length > 0) {
-    const topN = config.topN || 3;
+    const topN = config.topN || 5;
     const sorted = sortFilesBySeverity(result.files);
     const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
+
+    if (!config.showAll && sorted.length > 0) {
+      lines.push(chalk.bold.white(`TOP ${Math.min(topN, sorted.length)} RISKS`));
+      lines.push('');
+    }
 
     for (const file of topFiles) {
       const absolutePath = path.isAbsolute(file.path) ? file.path : path.join(cwd, file.path);
@@ -103,7 +109,13 @@ function formatDefaultOutput(result: AnalysisResult, config: ConsoleOutputConfig
     if (!config.showAll && sorted.length > topN) {
       const hiddenCount = sorted.length - topN;
       lines.push(chalk.dim(`  ... ${hiddenCount} more file(s) not shown`));
-      lines.push(chalk.dim(`  Run with ${chalk.cyan('--show-all')} to see all files`));
+      lines.push(
+        chalk.dim(
+          `  Run with ${chalk.cyan('--details')} for full breakdown or ${chalk.cyan(
+            '--show-all',
+          )} to see all files`,
+        ),
+      );
       lines.push('');
     }
   }
@@ -149,10 +161,18 @@ function formatDetailedOutput(result: AnalysisResult, config: ConsoleOutputConfi
   lines.push('');
 
   const sorted = sortFilesBySeverity(result.files);
-  const topN = config.topN || 3;
-  const topFiles = config.showAll ? sorted : sorted.slice(0, topN);
 
-  for (const file of topFiles) {
+  const gateStats = calculateGateStats(result);
+  if (gateStats.total > 0) {
+    lines.push(chalk.bold.white('Signal Summary'));
+    lines.push(chalk.gray('─'.repeat(30)));
+    lines.push(`  ${chalk.red.bold(gateStats.blocking)} high-impact signals (can block)`);
+    lines.push(`  ${chalk.yellow(gateStats.advisory)} advisory signals`);
+    lines.push(`  ${chalk.dim(gateStats.filtered)} filtered (low confidence)`);
+    lines.push('');
+  }
+
+  for (const file of sorted) {
     const absolutePath = path.isAbsolute(file.path) ? file.path : path.join(cwd, file.path);
     const clickablePath = absolutePath.replace(/\\/g, '/');
 
@@ -161,14 +181,28 @@ function formatDetailedOutput(result: AnalysisResult, config: ConsoleOutputConfi
     lines.push(chalk.cyan.underline(clickablePath));
     lines.push('');
 
-    lines.push(chalk.gray('  ┌─ Risk Score:    ') + formatRiskScore(file.riskScore));
+    lines.push(chalk.gray('  ┌─ Risk Score:       ') + formatRiskScore(file.riskScore));
     lines.push(
-      chalk.gray('  └─ Blast Radius:  ') +
+      chalk.gray('  ├─ Gated Score:      ') +
+        formatRiskScore(file.gatedRiskScore) +
+        chalk.dim(' (for PASS/FAIL)'),
+    );
+    lines.push(
+      chalk.gray('  └─ Blast Radius:     ') +
         (file.blastRadius > 0
           ? chalk.yellow(`${file.blastRadius} dependents`)
           : chalk.dim('isolated')),
     );
     lines.push('');
+
+    if (file.gateStats && (file.gateStats.advisory > 0 || file.gateStats.filtered > 0)) {
+      lines.push(
+        chalk.dim(
+          `  Signals: ${file.gateStats.blocking} high-impact, ${file.gateStats.advisory} advisory, ${file.gateStats.filtered} filtered`,
+        ),
+      );
+      lines.push('');
+    }
 
     if (file.evidence.length > 0) {
       lines.push(chalk.bold.white('  Signals Detected:'));
@@ -258,11 +292,66 @@ function formatSummaryBox(result: AnalysisResult): string {
       ? chalk.red.bold(result.summary.blockerCount)
       : chalk.green('0'));
 
+  const gateStats = calculateGateStats(result);
+
+  let suppressedCount = 0;
+  try {
+    const activeSuppressions = getActiveSuppressions(result.meta.cwd);
+    suppressedCount = activeSuppressions.length;
+  } catch {
+    // Ignore errors when reading suppressions
+  }
+
   lines.push(chalk.gray('─'.repeat(60)));
   lines.push(`${filesStr}${sep}${riskStr}${sep}${blockersStr}`);
+
+  if (gateStats.filtered > 0 || gateStats.advisory > 0) {
+    const gateStr =
+      chalk.dim('Signals: ') +
+      chalk.bold(gateStats.blocking.toString()) +
+      chalk.dim(' high-impact, ') +
+      chalk.dim(gateStats.advisory.toString()) +
+      chalk.dim(' advisory, ') +
+      chalk.dim(gateStats.filtered.toString()) +
+      chalk.dim(' filtered');
+    lines.push(gateStr);
+  }
+
+  if (suppressedCount > 0) {
+    lines.push(
+      chalk.dim(`Suppressed: ${suppressedCount} rule(s) active — run `) +
+        chalk.cyan('dsense suppress list') +
+        chalk.dim(' to see'),
+    );
+  }
+
   lines.push(chalk.gray('─'.repeat(60)));
 
   return lines.join('\n');
+}
+
+/**
+ * Calculate aggregate gate stats from all files
+ */
+function calculateGateStats(result: AnalysisResult): {
+  blocking: number;
+  advisory: number;
+  filtered: number;
+  total: number;
+} {
+  let blocking = 0;
+  let advisory = 0;
+  let filtered = 0;
+
+  for (const file of result.files) {
+    if (file.gateStats) {
+      blocking += file.gateStats.blocking;
+      advisory += file.gateStats.advisory;
+      filtered += file.gateStats.filtered;
+    }
+  }
+
+  return { blocking, advisory, filtered, total: blocking + advisory + filtered };
 }
 
 function getReasonStyle(reason: string): { icon: string; color: (s: string) => string } {

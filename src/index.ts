@@ -29,3 +29,14 @@ export type { DiffScope } from './git/diff';
 export type { DetectorProfile } from './signals';
 export type { DiffeSenseConfig } from './config/schema';
 export type { EvaluationResult, RuleResult } from './policy/engine';
+
+export {
+  AnalysisCache,
+  createCache,
+  buildCacheKeyComponents,
+  CacheConfig,
+  CachedResult,
+  CacheKeyComponents,
+  CacheStats,
+  DEFAULT_CACHE_CONFIG,
+} from './cache';

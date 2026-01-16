@@ -1,0 +1,12 @@
+diff --git a/src/lib/helpers.ts b/src/utils/helpers.ts
+similarity index 100%
+rename from src/lib/helpers.ts
+rename to src/utils/helpers.ts
+diff --git a/src/lib/math.ts b/src/utils/math.ts
+similarity index 100%
+rename from src/lib/math.ts
+rename to src/utils/math.ts
+diff --git a/src/lib/string.ts b/src/utils/string.ts
+similarity index 100%
+rename from src/lib/string.ts
+rename to src/utils/string.ts

@@ -1,0 +1,111 @@
+{
+  "timestamp": "2026-01-16T00:01:21.403Z",
+  "version": "1.5.1",
+  "config": {
+    "runs": 3
+  },
+  "results": [
+    {
+      "repo": ".",
+      "options": {
+        "scope": "branch",
+        "base": "main",
+        "analyzeAll": true
+      },
+      "runs": [
+        {
+          "success": true,
+          "exitCode": 1,
+          "runtime": 577,
+          "ttfr": 577,
+          "memoryUsed": 919944,
+          "parseError": null,
+          "filesAnalyzed": 55,
+          "filesChanged": 55,
+          "signalsTotal": 2082,
+          "highestRisk": 9,
+          "blockerCount": 4,
+          "warningCount": 8,
+          "infoCount": 0,
+          "signalsByConfidence": {
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          },
+          "signalsByClass": {
+            "critical": 0,
+            "behavioral": 0,
+            "maintainability": 0
+          }
+        },
+        {
+          "success": true,
+          "exitCode": 1,
+          "runtime": 576,
+          "ttfr": 576,
+          "memoryUsed": 874440,
+          "parseError": null,
+          "filesAnalyzed": 55,
+          "filesChanged": 55,
+          "signalsTotal": 2082,
+          "highestRisk": 9,
+          "blockerCount": 4,
+          "warningCount": 8,
+          "infoCount": 0,
+          "signalsByConfidence": {
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          },
+          "signalsByClass": {
+            "critical": 0,
+            "behavioral": 0,
+            "maintainability": 0
+          }
+        },
+        {
+          "success": true,
+          "exitCode": 1,
+          "runtime": 610,
+          "ttfr": 610,
+          "memoryUsed": 857712,
+          "parseError": null,
+          "filesAnalyzed": 55,
+          "filesChanged": 55,
+          "signalsTotal": 2082,
+          "highestRisk": 9,
+          "blockerCount": 4,
+          "warningCount": 8,
+          "infoCount": 0,
+          "signalsByConfidence": {
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          },
+          "signalsByClass": {
+            "critical": 0,
+            "behavioral": 0,
+            "maintainability": 0
+          }
+        }
+      ],
+      "stats": {
+        "avgRuntime": 588,
+        "minRuntime": 576,
+        "maxRuntime": 610,
+        "p95Runtime": 610,
+        "avgTTFR": 588,
+        "minTTFR": 576,
+        "filesAnalyzed": 55,
+        "filesChanged": 55,
+        "signalsTotal": 2082,
+        "highestRisk": 9,
+        "blockerCount": 4,
+        "warningCount": 8,
+        "isDeterministic": true
+      },
+      "timestamp": "2026-01-16T00:01:21.402Z",
+      "name": "diffesense (self)"
+    }
+  ]
+}

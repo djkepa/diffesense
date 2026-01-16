@@ -113,5 +113,39 @@ describe('Risk Severity', () => {
 
       expect(files).toEqual(original);
     });
+
+    it('should produce deterministic TOP 5 (stable sorting contract)', () => {
+      const files = [
+        { path: 'src/auth/login.ts', riskScore: 8.5 },
+        { path: 'src/auth/logout.ts', riskScore: 8.5 },
+        { path: 'src/api/users.ts', riskScore: 7.2 },
+        { path: 'src/api/posts.ts', riskScore: 7.2 },
+        { path: 'src/utils/format.ts', riskScore: 4.5 },
+        { path: 'src/utils/validate.ts', riskScore: 4.5 },
+        { path: 'src/components/Button.tsx', riskScore: 3.0 },
+        { path: 'src/components/Modal.tsx', riskScore: 3.0 },
+        { path: 'src/index.ts', riskScore: 2.0 },
+        { path: 'src/App.tsx', riskScore: 2.0 },
+      ];
+
+      const sorted1 = sortFilesBySeverity(files);
+      const sorted2 = sortFilesBySeverity(files);
+      const sorted3 = sortFilesBySeverity([...files].reverse());
+
+      const top5_1 = sorted1.slice(0, 5).map((f) => f.path);
+      const top5_2 = sorted2.slice(0, 5).map((f) => f.path);
+      const top5_3 = sorted3.slice(0, 5).map((f) => f.path);
+
+      expect(top5_1).toEqual(top5_2);
+      expect(top5_1).toEqual(top5_3);
+
+      expect(top5_1).toEqual([
+        'src/auth/login.ts',
+        'src/auth/logout.ts',
+        'src/api/posts.ts',
+        'src/api/users.ts',
+        'src/utils/format.ts',
+      ]);
+    });
   });
 });

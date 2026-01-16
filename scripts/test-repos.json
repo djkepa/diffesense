@@ -1,0 +1,12 @@
+[
+  {
+    "name": "diffesense (self)",
+    "path": ".",
+    "type": "internal",
+    "options": {
+      "scope": "branch",
+      "base": "main",
+      "analyzeAll": true
+    }
+  }
+]
