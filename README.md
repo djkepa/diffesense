@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://i.ibb.co/RkSKQT68/diffesense-logo.png" alt="DiffeSense Logo" width="180"/>
+<img src="https://i.ibb.co/gMvbdQNm/diffesense-logo-text.png" alt="DiffeSense Logo" width="180"/>
 
 # DiffeSense
 
